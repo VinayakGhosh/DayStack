@@ -8,7 +8,6 @@ class TaskCreateSchema(BaseModel):
     project_id: UUID
     name: str
     description: Optional[str] = None
-    assigned_to: Optional[UUID] = None
 
 
 class TaskResponseSchema(BaseModel):
@@ -17,7 +16,6 @@ class TaskResponseSchema(BaseModel):
     status_id: Optional[UUID]
     status_name: Optional[str]
     created_by: UUID
-    assigned_to: Optional[UUID]
     name: str
     description: Optional[str]
     created_at: datetime

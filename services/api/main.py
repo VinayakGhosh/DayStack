@@ -16,6 +16,12 @@ from scheduler import scheduler
 load_dotenv()
 
 
+def _cors_origins() -> list[str]:
+    """Read explicit browser origins from the deployment environment."""
+    configured = os.getenv("CORS_ALLOWED_ORIGINS", "")
+    return [origin.strip() for origin in configured.split(",") if origin.strip()]
+
+
 # Initialize logging
 logging.basicConfig(
     level=logging.INFO,
@@ -73,9 +79,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8080",  # frontend
-    ],
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -1,8 +1,8 @@
 // API utility module for handling all requests
 
-// const API_BASE_URL = import.meta.env.VITE_API_URL
-// const API_BASE_URL = "http://65.2.144.240/api/";
-const API_BASE_URL = "http://localhost:8000";
+// An empty value supports same-site deployments; local development supplies it
+// through VITE_API_BASE_URL.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 interface ApiResponse<T> {
   data?: T;
@@ -121,7 +121,7 @@ export const authApi = {
 export const projectsApi = {
   getAll: () => apiRequest<Project[]>('/v1/project/'),
 
-  getById: (id: string) => apiRequest<Project>(`/v1/project/?project_id=${id}`),
+  getById: (id: string) => apiRequest<Project[]>(`/v1/project/?project_id=${id}`),
 
   create: (data: { name: string; description?: string }) =>
     apiRequest<Project>('/v1/project/', {
@@ -231,6 +231,8 @@ export interface ProjectStatus {
   project_id: string;
   name: string;
   description?: string;
+  is_completion: boolean;
+  display_order: number;
   created_at: string;
   updated_at: string;
 }
@@ -243,7 +245,6 @@ export interface Task {
   status_id: string | null;
   status_name?: string | null;
   created_by: string;
-  assigned_to?: string | null;
   created_at: string;
   updated_at: string;
 }
