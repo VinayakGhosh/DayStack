@@ -20,10 +20,27 @@ from schema.project import (
 from pydantic import UUID4
 from typing import List, Optional
 from task_workspace.service import TaskWorkspace
-from task_workspace.sqlalchemy_repository import SqlAlchemyTaskWorkspaceRepository
+from task_workspace.sqlalchemy_repository import (
+    SqlAlchemyTaskWorkspaceRepository,
+    WorkspaceConflict,
+    WorkspaceForbidden,
+    WorkspaceNotFound,
+)
 
 
 router = APIRouter()
+
+
+def _workspace(db: Session) -> TaskWorkspace:
+    return TaskWorkspace(SqlAlchemyTaskWorkspaceRepository(db))
+
+
+def _raise_workspace_error(error: Exception) -> None:
+    if isinstance(error, WorkspaceConflict):
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if isinstance(error, WorkspaceForbidden):
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    raise HTTPException(status_code=404, detail=str(error)) from error
 
 DEFAULT_STATUSES = [
     {"name": "Todo", "description": "Task is not yet started"},
@@ -77,7 +94,7 @@ def create_project(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    return TaskWorkspace(SqlAlchemyTaskWorkspaceRepository(db)).create_project(
+    return _workspace(db).create_project(
         current_user.user_id, payload.name, payload.description
     )
 
@@ -162,7 +179,7 @@ def get_project(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    results = TaskWorkspace(SqlAlchemyTaskWorkspaceRepository(db)).list_projects(current_user.user_id)
+    results = _workspace(db).list_projects(current_user.user_id)
     if project_id is not None:
         results = [result for result in results if result[0].project_id == project_id]
 
@@ -286,13 +303,10 @@ def get_project_statuses(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    _get_project_or_404(db, project_id)
-
-    statuses = db.query(ProjectStatus).filter(
-        ProjectStatus.project_id == project_id
-    ).order_by(ProjectStatus.created_at).all()
-
-    return statuses
+    try:
+        return _workspace(db).list_statuses(current_user.user_id, project_id)
+    except (WorkspaceForbidden, WorkspaceNotFound) as error:
+        _raise_workspace_error(error)
 
 
 @router.post("/{project_id}/statuses", response_model=ProjectStatusResponse)
@@ -302,20 +316,12 @@ def create_project_status(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    project = _get_project_or_404(db, project_id)
-
-    if project.owner_user_id != current_user.user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to manage statuses for this project")
-
-    new_status = ProjectStatus(
-        project_id=project_id,
-        name=payload.name,
-        description=payload.description,
-    )
-    db.add(new_status)
-    db.commit()
-    db.refresh(new_status)
-    return new_status
+    try:
+        return _workspace(db).create_status(
+            current_user.user_id, project_id, payload.name, payload.description
+        )
+    except (WorkspaceForbidden, WorkspaceNotFound) as error:
+        _raise_workspace_error(error)
 
 
 @router.patch("/{project_id}/statuses/{status_id}", response_model=ProjectStatusResponse)
@@ -326,46 +332,12 @@ def update_project_status(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    project = _get_project_or_404(db, project_id)
-
-    if project.owner_user_id != current_user.user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to manage statuses for this project")
-
-    status = db.query(ProjectStatus).filter(
-        ProjectStatus.status_id == status_id,
-        ProjectStatus.project_id == project_id,
-    ).first()
-    if not status:
-        raise HTTPException(status_code=404, detail="Status not found")
-
-    old_name = status.name
-
-    if payload.name is not None:
-        status.name = payload.name
-    if payload.description is not None:
-        status.description = payload.description
-
-    if payload.name is not None and payload.name != old_name:
-        affected_tasks = db.query(Tasks).filter(
-            Tasks.project_id == project_id,
-            Tasks.status_id == status_id,
-            Tasks.isDelete == False,
-        ).all()
-
-        for task in affected_tasks:
-            db.add(TaskStatusHistory(
-                task_id=task.task_id,
-                old_status_id=status_id,
-                old_status_name=old_name,
-                new_status_id=status_id,
-                new_status_name=payload.name,
-                changed_by=current_user.user_id,
-            ))
-            task.status_name = payload.name
-
-    db.commit()
-    db.refresh(status)
-    return status
+    try:
+        return _workspace(db).update_status(
+            current_user.user_id, project_id, status_id, payload.name, payload.description
+        )
+    except (WorkspaceForbidden, WorkspaceNotFound) as error:
+        _raise_workspace_error(error)
 
 
 @router.delete("/{project_id}/statuses/{status_id}", status_code=204)
@@ -375,28 +347,7 @@ def delete_project_status(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    project = _get_project_or_404(db, project_id)
-
-    if project.owner_user_id != current_user.user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to manage statuses for this project")
-
-    status = db.query(ProjectStatus).filter(
-        ProjectStatus.status_id == status_id,
-        ProjectStatus.project_id == project_id,
-    ).first()
-    if not status:
-        raise HTTPException(status_code=404, detail="Status not found")
-
-    tasks_using = db.query(Tasks).filter(
-        Tasks.status_id == status_id,
-        Tasks.isDelete == False,
-    ).count()
-    if tasks_using > 0:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot delete status: {tasks_using} task(s) are currently using it",
-        )
-
-    db.delete(status)
-    db.commit()
-    return
+    try:
+        _workspace(db).delete_status(current_user.user_id, project_id, status_id)
+    except (WorkspaceConflict, WorkspaceForbidden, WorkspaceNotFound) as error:
+        _raise_workspace_error(error)
