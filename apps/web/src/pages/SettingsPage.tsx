@@ -29,9 +29,11 @@ const SettingsPage = () => {
   const { toast } = useToast();
 
   // Profile form state
-  const [firstName, setFirstName] = useState(user?.first_name || '');
-  const [lastName, setLastName] = useState(user?.last_name || '');
+  const nameParts = user?.display_name.split(' ') || [];
+  const [firstName, setFirstName] = useState(nameParts[0] || '');
+  const [lastName, setLastName] = useState(nameParts.slice(1).join(' '));
   const [email, setEmail] = useState(user?.email || '');
+  const [timeZone, setTimeZone] = useState(user?.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [profileSuccess, setProfileSuccess] = useState(false);
@@ -56,8 +58,8 @@ const SettingsPage = () => {
 
     setIsUpdatingProfile(true);
     const { data, error } = await authApi.updateProfile({
-      first_name: firstName.trim(),
-      last_name: lastName.trim(),
+      display_name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+      time_zone: timeZone.trim(),
     });
     setIsUpdatingProfile(false);
 
@@ -183,6 +185,19 @@ const SettingsPage = () => {
                 />
                 <p className="text-xs text-muted-foreground">
                   Email cannot be changed
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="timeZone">Time zone</Label>
+                <Input
+                  id="timeZone"
+                  value={timeZone}
+                  onChange={(e) => setTimeZone(e.target.value)}
+                  placeholder="Asia/Kolkata"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Use an IANA time zone, such as Asia/Kolkata.
                 </p>
               </div>
 

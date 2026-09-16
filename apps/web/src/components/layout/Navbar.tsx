@@ -24,7 +24,7 @@ const Navbar = () => {
 
   const getInitials = () => {
     if (!user) return 'U';
-    return `${user.first_name?.[0] || ''}${user.last_name?.[0] || ''}`.toUpperCase();
+    return user.display_name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
   };
 
   return (
@@ -63,7 +63,7 @@ const Navbar = () => {
                   <DropdownMenuContent className="w-56" align="end" forceMount>
                     <div className="flex items-center justify-start gap-2 p-2">
                       <div className="flex flex-col space-y-1 leading-none">
-                        <p className="font-medium">{user?.first_name} {user?.last_name}</p>
+                        <p className="font-medium">{user?.display_name}</p>
                         <p className="w-[200px] truncate text-sm text-muted-foreground">
                           {user?.email}
                         </p>

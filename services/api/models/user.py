@@ -15,8 +15,21 @@ class Users(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     role = Column(String, nullable=False, server_default=UserRoleEnum.GENERAL.value, default=UserRoleEnum.GENERAL.value)
+    time_zone = Column(String, nullable=False, server_default="UTC", default="UTC")
     created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'))
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=text('now()'), server_default=text('now()'))
+
+
+class MemberSessions(Base):
+    __tablename__ = "member_sessions"
+
+    session_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
+    refresh_token_hash = Column(String, nullable=False, unique=True, index=True)
+    expires_at = Column(TIMESTAMP(timezone=True), nullable=False)
+    revoked_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    replaced_by_session_id = Column(UUID, ForeignKey("member_sessions.session_id"), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'))
 
 
 class Subscriptions(Base):

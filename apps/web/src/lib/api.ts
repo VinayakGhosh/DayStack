@@ -8,48 +8,18 @@ interface ApiResponse<T> {
   data?: T;
   error?: string;
 }
-interface UserLoginResponse {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  expires_at: string;
-  user_id: string;
-  refresh_token_expires_at: string;
-}
 
-const getToken = (): string | null => {
-  return localStorage.getItem('auth_token');
-};
-
-export const setToken = (token: string): void => {
-  localStorage.setItem('auth_token', token);
-};
-
-export const clearToken = (): void => {
-  localStorage.removeItem('auth_token');
-};
-
-export const isAuthenticated = (): boolean => {
-  return !!getToken();
-};
-
+const csrfToken = (): string | undefined =>
+  document.cookie.split('; ').find((entry) => entry.startsWith('daystack_csrf='))?.split('=')[1];
 const handleResponse = async <T>(response: Response): Promise<ApiResponse<T>> => {
-  if (response.status === 401) {
-    if (window.location.pathname !== '/login') {
-      clearToken();
-      window.location.href = '/login';
-      return { error: 'Session expired. Please login again.' };
-    }
-    // If on login page, let the standard error handling deal with it
-  }
-
   if (response.status === 204) {
     return { data: undefined as T };
   }
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    return { error: errorData.detail || 'An error occurred' };
+    const detail = errorData.detail;
+    return { error: typeof detail === 'string' ? detail : detail?.message || 'An error occurred' };
   }
 
   const data = await response.json();
@@ -60,11 +30,10 @@ const apiRequest = async <T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> => {
-  const token = getToken();
-
+  const token = csrfToken();
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` }),
+    ...(token && { 'X-CSRF-Token': token }),
     ...options.headers,
   };
 
@@ -72,6 +41,7 @@ const apiRequest = async <T>(
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
       headers,
+      credentials: 'include',
     });
     return handleResponse<T>(response);
   } catch (error) {
@@ -82,36 +52,34 @@ const apiRequest = async <T>(
 // Auth endpoints
 export const authApi = {
   login: (email: string, password: string) =>
-    apiRequest<UserLoginResponse>(
-      "/v1/users/login",
+    apiRequest<Member>(
+      "/v1/sessions/login",
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          username: email,
-          password: password,
-        }),
+        body: JSON.stringify({ email, password }),
       }
     ),
 
-  register: (data: { first_name: string; last_name: string; email: string; password: string }) =>
-    apiRequest<{ message: string }>('/v1/users/signup', {
+  register: (data: { display_name: string; email: string; password: string; time_zone: string }) =>
+    apiRequest<Member>('/v1/sessions/signup', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  getProfile: () => apiRequest<User>('/v1/users/me'),
+  refresh: () => apiRequest<Member>('/v1/sessions/refresh', { method: 'POST' }),
 
-  updateProfile: (data: Partial<User>) =>
-    apiRequest<User>('/auth/me', {
+  logout: () => apiRequest<void>('/v1/sessions/logout', { method: 'POST' }),
+
+  getProfile: () => apiRequest<Member>('/v1/sessions/current-member'),
+
+  updateProfile: (data: Partial<Member>) =>
+    apiRequest<Member>('/v1/sessions/current-member', {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
 
   updatePassword: (data: { current_password: string; new_password: string }) =>
-    apiRequest<{ message: string }>('/auth/password', {
+    apiRequest<void>('/v1/sessions/password', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
@@ -208,12 +176,11 @@ export const subscriptionApi = {
 };
 
 // Types
-export interface User {
-  id: string;
+export interface Member {
+  member_id: string;
   email: string;
-  first_name: string;
-  last_name: string;
-  created_at: string;
+  display_name: string;
+  time_zone: string;
 }
 
 export interface Project {

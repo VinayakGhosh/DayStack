@@ -62,7 +62,7 @@ const SignupPage = () => {
     if (result.success) {
       setSuccess(true);
       setTimeout(() => {
-        navigate('/login');
+        navigate('/dashboard');
       }, 2000);
     } else {
       setError(result.error || 'Registration failed');
@@ -80,7 +80,7 @@ const SignupPage = () => {
               </div>
               <h2 className="text-xl font-semibold text-foreground mb-2">Your DayStack is ready!</h2>
               <p className="text-muted-foreground">
-                Redirecting you to login...
+                Taking you to your workspace...
               </p>
             </div>
           </CardContent>

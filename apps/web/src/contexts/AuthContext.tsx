@@ -1,35 +1,33 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { authApi, User, setToken, clearToken, isAuthenticated } from '@/lib/api';
+import { authApi, Member } from '@/lib/api';
 
 interface AuthContextType {
-  user: User | null;
+  user: Member | null;
   isLoading: boolean;
   isLoggedIn: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (data: { first_name: string; last_name: string; email: string; password: string }) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<Member | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshUser = async () => {
-    if (!isAuthenticated()) {
-      setUser(null);
-      setIsLoading(false);
-      return;
-    }
-
     const { data, error } = await authApi.getProfile();
     if (data) {
       setUser(data);
     } else if (error) {
-      clearToken();
-      setUser(null);
+      const refreshed = await authApi.refresh();
+      if (refreshed.data) {
+        setUser(refreshed.data);
+      } else {
+        setUser(null);
+      }
     }
     setIsLoading(false);
   };
@@ -40,24 +38,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (email: string, password: string) => {
     const { data, error } = await authApi.login(email, password);
-    if (data?.access_token) {
-      setToken(data.access_token);
-      await refreshUser();
+    if (data) {
+      setUser(data);
       return { success: true };
     }
     return { success: false, error: error || 'Login failed' };
   };
 
   const register = async (data: { first_name: string; last_name: string; email: string; password: string }) => {
-    const { error } = await authApi.register(data);
-    if (!error) {
+    const { data: member, error } = await authApi.register({
+      display_name: `${data.first_name.trim()} ${data.last_name.trim()}`.trim(),
+      email: data.email,
+      password: data.password,
+      time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+    });
+    if (member) {
+      setUser(member);
       return { success: true };
     }
     return { success: false, error };
   };
 
-  const logout = () => {
-    clearToken();
+  const logout = async () => {
+    await authApi.logout();
     setUser(null);
   };
 
