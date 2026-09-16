@@ -1,0 +1,37 @@
+import unittest
+from uuid import uuid4
+
+from task_workspace.service import TaskWorkspace
+
+
+class InMemoryWorkspaceRepository:
+    def __init__(self):
+        self.projects = {}
+
+    def list_projects(self, member_id):
+        return [project for project in self.projects.values() if project["member_id"] == member_id]
+
+    def create_project(self, member_id, name, description):
+        project = {
+            "project_id": uuid4(),
+            "member_id": member_id,
+            "name": name,
+            "description": description,
+        }
+        self.projects[project["project_id"]] = project
+        return project
+
+
+class TaskWorkspaceTests(unittest.TestCase):
+    def test_member_sees_only_their_projects_and_empty_collections_are_valid(self):
+        repository = InMemoryWorkspaceRepository()
+        workspace = TaskWorkspace(repository)
+        first_member = uuid4()
+        second_member = uuid4()
+
+        self.assertEqual(workspace.list_projects(first_member), [])
+
+        project = workspace.create_project(first_member, "Client launch", "Prepare the launch")
+
+        self.assertEqual(workspace.list_projects(first_member), [project])
+        self.assertEqual(workspace.list_projects(second_member), [])

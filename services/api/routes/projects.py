@@ -19,6 +19,8 @@ from schema.project import (
 )
 from pydantic import UUID4
 from typing import List, Optional
+from task_workspace.service import TaskWorkspace
+from task_workspace.sqlalchemy_repository import SqlAlchemyTaskWorkspaceRepository
 
 
 router = APIRouter()
@@ -74,36 +76,10 @@ def create_project(
     payload: CreateProject,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
-    subscription=Depends(require_active_subscription),
 ):
-    user_plan = db.query(Plans).filter(Plans.plan_id == subscription.plan_id).first()
-    if not user_plan:
-        raise HTTPException(status_code=404, detail="No plan exists for this subscription")
-
-    total_projects = (
-        db.query(Projects).filter(
-            Projects.owner_user_id == current_user.user_id,
-            Projects.organization_id.is_(None),
-            Projects.isDelete == False,
-        ).count()
+    return TaskWorkspace(SqlAlchemyTaskWorkspaceRepository(db)).create_project(
+        current_user.user_id, payload.name, payload.description
     )
-
-    if user_plan.max_projects >= 0 and total_projects >= user_plan.max_projects:
-        raise HTTPException(status_code=403, detail="Project limit reached for your current plan")
-
-    new_project = Projects(
-        owner_user_id=current_user.user_id,
-        organization_id=None,
-        name=payload.name,
-        description=payload.description,
-    )
-    db.add(new_project)
-    db.flush()
-
-    _seed_default_statuses(db, new_project.project_id)
-    db.commit()
-    db.refresh(new_project)
-    return new_project
 
 
 @router.post("/organization", response_model=ProjectCreateResponse)
@@ -186,37 +162,9 @@ def get_project(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    done_status = db.query(ProjectStatus).join(
-        Projects, ProjectStatus.project_id == Projects.project_id
-    ).filter(
-        Projects.owner_user_id == current_user.user_id,
-        func.lower(ProjectStatus.name) == "done",
-    ).subquery()
-
-    query = (
-        db.query(
-            Projects,
-            func.count(Tasks.task_id).label("total_tasks"),
-            func.count(Tasks.task_id)
-                .filter(Tasks.status_id == done_status.c.status_id)
-                .label("completed_tasks"),
-        )
-        .outerjoin(Tasks, (Tasks.project_id == Projects.project_id) & (Tasks.isDelete == False))
-        .filter(
-            Projects.owner_user_id == current_user.user_id,
-            Projects.organization_id == None,
-            Projects.isDelete == False,
-        )
-        .group_by(Projects.project_id)
-    )
-
+    results = TaskWorkspace(SqlAlchemyTaskWorkspaceRepository(db)).list_projects(current_user.user_id)
     if project_id is not None:
-        query = query.filter(Projects.project_id == project_id)
-
-    results = query.all()
-
-    if not results:
-        raise HTTPException(status_code=404, detail="No projects found for the user")
+        results = [result for result in results if result[0].project_id == project_id]
 
     response = []
     for project, total_tasks, completed_tasks in results:

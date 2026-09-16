@@ -1,8 +1,8 @@
 // API utility module for handling all requests
 
-// const API_BASE_URL = import.meta.env.VITE_API_URL
-// const API_BASE_URL = "http://65.2.144.240/api/";
-const API_BASE_URL = "http://localhost:8000";
+// An empty value supports same-site deployments; local development supplies it
+// through VITE_API_BASE_URL.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 interface ApiResponse<T> {
   data?: T;
