@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
-import { Factory, Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
+import { Layers3, Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 const SignupPage = () => {
@@ -94,14 +94,14 @@ const SignupPage = () => {
       <div className="w-full max-w-md">
         {/* Logo */}
         <Link to="/" className="flex items-center justify-center gap-2 mb-8 text-foreground">
-          <Factory className="h-10 w-10 text-primary" />
-          <span className="text-2xl font-bold">Task Factory</span>
+          <Layers3 className="h-10 w-10 text-primary" />
+          <span className="text-2xl font-bold">DayStack</span>
         </Link>
 
         <Card>
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">Create an account</CardTitle>
-            <CardDescription>Get started with Task Factory today</CardDescription>
+            <CardDescription>Get started with DayStack today</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">

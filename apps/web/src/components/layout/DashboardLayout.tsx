@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { Link, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  Factory,
+  Layers3,
   LayoutDashboard,
   FolderKanban,
   CreditCard,
@@ -48,8 +48,8 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       {/* Logo */}
       <div className="p-6 border-b border-border">
         <Link to="/" className="flex items-center gap-2 text-foreground">
-          <Factory className="h-8 w-8 text-primary" />
-          <span className="text-xl font-bold">Task Factory</span>
+          <Layers3 className="h-8 w-8 text-primary" />
+          <span className="text-xl font-bold">DayStack</span>
         </Link>
       </div>
 
@@ -109,8 +109,8 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         {/* Mobile Header */}
         <header className="lg:hidden flex items-center justify-between p-4 bg-card border-b border-border sticky top-0 z-40">
           <Link to="/" className="flex items-center gap-2 text-foreground">
-            <Factory className="h-6 w-6 text-primary" />
-            <span className="text-lg font-bold">Task Factory</span>
+            <Layers3 className="h-6 w-6 text-primary" />
+            <span className="text-lg font-bold">DayStack</span>
           </Link>
           <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
             <SheetTrigger asChild>

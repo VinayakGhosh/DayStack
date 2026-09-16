@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { Factory, Menu, X, LogOut, Settings, LayoutDashboard } from 'lucide-react';
+import { Layers3, Menu, X, LogOut, Settings, LayoutDashboard } from 'lucide-react';
 import { useState } from 'react';
 import {
   DropdownMenu,
@@ -33,8 +33,8 @@ const Navbar = () => {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 text-foreground hover:text-primary transition-colors">
-            <Factory className="h-8 w-8 text-primary" />
-            <span className="text-xl font-bold">Task Factory</span>
+            <Layers3 className="h-8 w-8 text-primary" />
+            <span className="text-xl font-bold">DayStack</span>
           </Link>
 
           {/* Desktop Navigation */}

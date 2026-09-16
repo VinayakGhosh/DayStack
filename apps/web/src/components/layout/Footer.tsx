@@ -1,4 +1,4 @@
-import { Factory } from 'lucide-react';
+import { Layers3 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const Footer = () => {
@@ -9,8 +9,8 @@ const Footer = () => {
           {/* Brand */}
           <div className="space-y-4">
             <Link to="/" className="flex items-center gap-2 text-foreground">
-              <Factory className="h-8 w-8 text-primary" />
-              <span className="text-xl font-bold">Task Factory</span>
+              <Layers3 className="h-8 w-8 text-primary" />
+              <span className="text-xl font-bold">DayStack</span>
             </Link>
             <p className="text-muted-foreground text-sm">
               Streamline your workflow and boost productivity with our powerful task management platform.
@@ -85,7 +85,7 @@ const Footer = () => {
         </div>
 
         <div className="border-t border-border mt-8 pt-8 text-center text-muted-foreground text-sm">
-          <p>&copy; {new Date().getFullYear()} Task Factory. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} DayStack. All rights reserved.</p>
         </div>
       </div>
     </footer>

@@ -2,7 +2,7 @@
 set -e
 
 ECR_REGISTRY="017601971158.dkr.ecr.ap-south-1.amazonaws.com"
-IMAGE_NAME="task-factory-frontend"
+IMAGE_NAME="daystack-frontend"
 FULL_IMAGE="$ECR_REGISTRY/$IMAGE_NAME"
 EC2_USER="ubuntu"
 EC2_HOST="65.2.144.240"          # fill in after Step 4

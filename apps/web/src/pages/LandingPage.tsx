@@ -119,8 +119,8 @@ const LandingPage = () => {
               <span className="text-primary">Deliver.</span>
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl">
-              Task Factory is the modern project management platform that helps teams
-              organize work, track progress, and deliver results faster than ever.
+              DayStack helps you organize personal work, focus on today, and make steady
+              progress without losing sight of what matters.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Link to="/signup">
@@ -150,7 +150,7 @@ const LandingPage = () => {
               Everything you need to manage work
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              From simple task lists to complex project workflows, Task Factory has the
+              From simple task lists to focused project workflows, DayStack has the
               tools you need to get work done.
             </p>
           </div>
@@ -244,7 +244,7 @@ const LandingPage = () => {
             Ready to boost your productivity?
           </h2>
           <p className="text-lg text-primary-foreground/80 mb-8 max-w-2xl mx-auto">
-            Join thousands of teams already using Task Factory to deliver their best work.
+            Build a calmer, more focused workday with DayStack.
           </p>
           <Link to="/signup">
             <Button size="lg" variant="secondary">
