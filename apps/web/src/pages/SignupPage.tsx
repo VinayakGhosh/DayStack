@@ -78,7 +78,7 @@ const SignupPage = () => {
               <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
                 <CheckCircle className="h-8 w-8 text-primary" />
               </div>
-              <h2 className="text-xl font-semibold text-foreground mb-2">Account Created!</h2>
+              <h2 className="text-xl font-semibold text-foreground mb-2">Your DayStack is ready!</h2>
               <p className="text-muted-foreground">
                 Redirecting you to login...
               </p>
@@ -100,8 +100,8 @@ const SignupPage = () => {
 
         <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Create an account</CardTitle>
-            <CardDescription>Get started with DayStack today</CardDescription>
+            <CardTitle className="text-2xl">Create your DayStack</CardTitle>
+            <CardDescription>Set up your personal space for focused work</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -179,7 +179,7 @@ const SignupPage = () => {
             </form>
 
             <div className="mt-6 text-center text-sm">
-              <span className="text-muted-foreground">Already have an account? </span>
+              <span className="text-muted-foreground">Already use DayStack? </span>
               <Link to="/login" className="text-primary hover:underline font-medium">
                 Sign in
               </Link>

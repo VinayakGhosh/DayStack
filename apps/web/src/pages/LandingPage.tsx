@@ -6,10 +6,8 @@ import Footer from '@/components/layout/Footer';
 import {
   CheckCircle,
   FolderKanban,
-  Users,
   Zap,
   Shield,
-  BarChart3,
   Clock,
   ArrowRight,
 } from 'lucide-react';
@@ -18,74 +16,23 @@ import heroBg from '@/assets/hero-bg.jpg';
 const features = [
   {
     icon: FolderKanban,
-    title: 'Project Organization',
-    description: 'Organize your work into projects with clear goals and milestones.',
+    title: 'Keep work in projects',
+    description: 'Give related tasks a home without turning your personal work into a complicated system.',
   },
   {
     icon: CheckCircle,
-    title: 'Task Management',
-    description: 'Create, assign, and track tasks with priorities and deadlines.',
-  },
-  {
-    icon: BarChart3,
-    title: 'Progress Tracking',
-    description: 'Monitor project progress with visual dashboards and reports.',
+    title: 'Make the next task clear',
+    description: 'Capture the details that matter, then move work forward one task at a time.',
   },
   {
     icon: Clock,
-    title: 'Time Management',
-    description: 'Set deadlines and never miss important milestones.',
-  },
-  {
-    icon: Users,
-    title: 'Team Collaboration',
-    description: 'Work together seamlessly with your team members.',
+    title: 'Focus on today',
+    description: 'Choose the work worth doing today and keep your attention on a manageable shortlist.',
   },
   {
     icon: Shield,
-    title: 'Secure & Reliable',
-    description: 'Your data is protected with enterprise-grade security.',
-  },
-];
-
-const pricingPlans = [
-  {
-    name: 'Starter',
-    price: 0,
-    description: 'Perfect for individuals getting started',
-    features: ['Up to 3 projects', '50 tasks per project', 'Basic analytics', 'Email support'],
-    cta: 'Get Started',
-    popular: false,
-  },
-  {
-    name: 'Professional',
-    price: 19,
-    description: 'For growing teams and businesses',
-    features: [
-      'Unlimited projects',
-      'Unlimited tasks',
-      'Advanced analytics',
-      'Priority support',
-      'Team collaboration',
-      'Custom integrations',
-    ],
-    cta: 'Start Free Trial',
-    popular: true,
-  },
-  {
-    name: 'Enterprise',
-    price: 49,
-    description: 'For large organizations with complex needs',
-    features: [
-      'Everything in Professional',
-      'Dedicated account manager',
-      'Custom onboarding',
-      'SLA guarantee',
-      'Advanced security',
-      'API access',
-    ],
-    cta: 'Contact Sales',
-    popular: false,
+    title: 'Keep your work private',
+    description: 'Your DayStack is personal: it is built around the work you own and decide to complete.',
   },
 ];
 
@@ -112,20 +59,20 @@ const LandingPage = () => {
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-full text-sm font-medium mb-6">
               <Zap className="h-4 w-4" />
-              Boost your productivity by 10x
+              A calmer way to finish meaningful work
             </div>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
-              Build. Organize.{' '}
-              <span className="text-primary">Deliver.</span>
+              Make today&apos;s work
+              <span className="text-primary"> count.</span>
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl">
-              DayStack helps you organize personal work, focus on today, and make steady
-              progress without losing sight of what matters.
+              DayStack is a personal task-execution space for individual professionals.
+              Plan your projects, choose what matters today, and make steady progress.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Link to="/signup">
                 <Button size="lg" className="w-full sm:w-auto">
-                  Start for Free
+                  Start using DayStack
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </Link>
@@ -136,7 +83,7 @@ const LandingPage = () => {
               </Link>
             </div>
             <p className="text-sm text-muted-foreground mt-4">
-              Start managing tasks in minutes.
+              Built for your workday—not a team plan or a sales pipeline.
             </p>
           </div>
         </div>
@@ -147,11 +94,11 @@ const LandingPage = () => {
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Everything you need to manage work
+              A clearer path from planned to done
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              From simple task lists to focused project workflows, DayStack has the
-              tools you need to get work done.
+              DayStack gives your personal work enough structure to move forward, without
+              adding another system to maintain.
             </p>
           </div>
 
@@ -176,79 +123,18 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Pricing Section */}
-      <section id="pricing" className="py-20 bg-background">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Simple, transparent pricing
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Choose the plan that fits your needs. Upgrade or downgrade anytime.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {pricingPlans.map((plan) => (
-              <Card
-                key={plan.name}
-                className={`relative ${
-                  plan.popular
-                    ? 'border-primary shadow-lg scale-105'
-                    : 'border-border'
-                }`}
-              >
-                {plan.popular && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                    <span className="bg-primary text-primary-foreground px-4 py-1 rounded-full text-sm font-medium">
-                      Most Popular
-                    </span>
-                  </div>
-                )}
-                <CardHeader className="text-center pb-4">
-                  <CardTitle className="text-xl">{plan.name}</CardTitle>
-                  <div className="mt-4">
-                    <span className="text-4xl font-bold text-foreground">${plan.price}</span>
-                    <span className="text-muted-foreground">/month</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">{plan.description}</p>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-3 mb-6">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex items-center gap-2">
-                        <CheckCircle className="h-5 w-5 text-primary shrink-0" />
-                        <span className="text-foreground text-sm">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Link to="/signup">
-                    <Button
-                      className="w-full"
-                      variant={plan.popular ? 'default' : 'outline'}
-                    >
-                      {plan.cta}
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* CTA Section */}
       <section className="py-20 bg-primary">
         <div className="container mx-auto px-4 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-primary-foreground mb-4">
-            Ready to boost your productivity?
+            Ready to make today count?
           </h2>
           <p className="text-lg text-primary-foreground/80 mb-8 max-w-2xl mx-auto">
-            Build a calmer, more focused workday with DayStack.
+            Create your DayStack and start with the work that matters next.
           </p>
           <Link to="/signup">
             <Button size="lg" variant="secondary">
-              Get Started for Free
+              Start using DayStack
               <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           </Link>

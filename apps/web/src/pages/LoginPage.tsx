@@ -49,7 +49,7 @@ const LoginPage = () => {
         <Card>
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">Welcome back</CardTitle>
-            <CardDescription>Sign in to your account to continue</CardDescription>
+            <CardDescription>Sign in to your DayStack and choose what matters today</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -102,7 +102,7 @@ const LoginPage = () => {
             </form>
 
             <div className="mt-6 text-center text-sm">
-              <span className="text-muted-foreground">Don't have an account? </span>
+              <span className="text-muted-foreground">New to DayStack? </span>
               <Link to="/signup" className="text-primary hover:underline font-medium">
                 Sign up
               </Link>
