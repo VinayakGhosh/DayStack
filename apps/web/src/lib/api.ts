@@ -232,6 +232,7 @@ export interface ProjectStatus {
   name: string;
   description?: string;
   is_completion: boolean;
+  display_order: number;
   created_at: string;
   updated_at: string;
 }

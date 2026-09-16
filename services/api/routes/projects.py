@@ -42,6 +42,21 @@ def _raise_workspace_error(error: Exception) -> None:
         raise HTTPException(status_code=403, detail=str(error)) from error
     raise HTTPException(status_code=404, detail=str(error)) from error
 
+
+def _project_response(result) -> ProjectResponse:
+    project, total_tasks, completed_tasks = result
+    return ProjectResponse(
+        project_id=project.project_id,
+        owner_user_id=project.owner_user_id,
+        organization_id=project.organization_id,
+        name=project.name,
+        description=project.description,
+        created_at=project.created_at,
+        updated_at=project.updated_at,
+        total_tasks=total_tasks,
+        completed_tasks=completed_tasks,
+    )
+
 DEFAULT_STATUSES = [
     {"name": "Todo", "description": "Task is not yet started"},
     {"name": "In Progress", "description": "Task is actively being worked on"},
@@ -88,15 +103,15 @@ def _get_project_or_404(db: Session, project_id):
 # Project CRUD
 # ---------------------------------------------------------------------------
 
-@router.post("/", response_model=ProjectCreateResponse)
+@router.post("/", response_model=ProjectResponse)
 def create_project(
     payload: CreateProject,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    return _workspace(db).create_project(
-        current_user.user_id, payload.name, payload.description
-    )
+    workspace = _workspace(db)
+    project = workspace.create_project(current_user.user_id, payload.name, payload.description)
+    return _project_response(workspace.get_project(current_user.user_id, project.project_id))
 
 
 @router.post("/organization", response_model=ProjectCreateResponse)
@@ -143,7 +158,7 @@ def create_project_organization(
     return new_project
 
 
-@router.patch("/{project_id}", response_model=ProjectCreateResponse)
+@router.patch("/{project_id}", response_model=ProjectResponse)
 def update_project_details(
     payload: PatchProject,
     project_id: UUID4 = Path(..., description="project_id of the project"),
@@ -151,9 +166,11 @@ def update_project_details(
     current_user=Depends(get_current_user),
 ):
     try:
-        return _workspace(db).update_project(
+        workspace = _workspace(db)
+        project = workspace.update_project(
             current_user.user_id, project_id, payload.name, payload.description
         )
+        return _project_response(workspace.get_project(current_user.user_id, project.project_id))
     except (WorkspaceForbidden, WorkspaceNotFound) as error:
         _raise_workspace_error(error)
 
@@ -170,19 +187,7 @@ def get_project(
 
     response = []
     for project, total_tasks, completed_tasks in results:
-        response.append(
-            ProjectResponse(
-                project_id=project.project_id,
-                owner_user_id=project.owner_user_id,
-                organization_id=project.organization_id,
-                name=project.name,
-                description=project.description,
-                created_at=project.created_at,
-                updated_at=project.updated_at,
-                total_tasks=total_tasks,
-                completed_tasks=completed_tasks,
-            )
-        )
+        response.append(_project_response((project, total_tasks, completed_tasks)))
     return response
 
 

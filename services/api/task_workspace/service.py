@@ -14,6 +14,9 @@ class TaskWorkspace:
     def list_projects(self, member_id: UUID):
         return self._repository.list_projects(member_id)
 
+    def get_project(self, member_id: UUID, project_id: UUID):
+        return self._repository.get_project(member_id, project_id)
+
     def create_project(self, member_id: UUID, name: str, description: str | None):
         return self._repository.create_project(member_id, name, description)
 

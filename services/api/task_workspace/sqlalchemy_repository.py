@@ -63,19 +63,26 @@ class SqlAlchemyTaskWorkspaceRepository:
         self._db.add(project)
         self._db.flush()
         for status in (
-            ("Todo", "Task is not yet started"),
-            ("In Progress", "Task is actively being worked on"),
-            ("Done", "Task has been completed", True),
+            ("To Do", "Task is not yet started", False, 0),
+            ("In Progress", "Task is actively being worked on", False, 1),
+            ("Completed", "Task has been completed", True, 2),
         ):
             self._db.add(ProjectStatus(
                 project_id=project.project_id,
                 name=status[0],
                 description=status[1],
-                is_completion=len(status) > 2 and status[2],
+                is_completion=status[2],
+                display_order=status[3],
             ))
         self._db.commit()
         self._db.refresh(project)
         return project
+
+    def get_project(self, member_id, project_id):
+        for project in self.list_projects(member_id):
+            if project[0].project_id == project_id:
+                return project
+        raise WorkspaceNotFound("Project not found")
 
     def update_project(self, member_id, project_id, name, description):
         project = self._personal_project(member_id, project_id)
@@ -96,7 +103,7 @@ class SqlAlchemyTaskWorkspaceRepository:
         self._personal_project(member_id, project_id)
         return self._db.query(ProjectStatus).filter(
             ProjectStatus.project_id == project_id
-        ).order_by(ProjectStatus.created_at).all()
+        ).order_by(ProjectStatus.display_order, ProjectStatus.created_at).all()
 
     def create_status(self, member_id, project_id, name, description):
         self._personal_project(member_id, project_id)
@@ -149,8 +156,7 @@ class SqlAlchemyTaskWorkspaceRepository:
         self._personal_project(member_id, project_id)
         todo = self._db.query(ProjectStatus).filter(
             ProjectStatus.project_id == project_id,
-            ProjectStatus.name.ilike("todo"),
-        ).first()
+        ).order_by(ProjectStatus.display_order, ProjectStatus.created_at).first()
         task = Tasks(project_id=project_id, created_by=member_id, assigned_to=None,
                      status_id=todo.status_id if todo else None, status_name=todo.name if todo else None,
                      name=name, description=description)

@@ -1,6 +1,6 @@
 import uuid
 from db.db import Base
-from sqlalchemy import Column, TIMESTAMP, String, UUID, Boolean, text, ForeignKey
+from sqlalchemy import Column, TIMESTAMP, String, UUID, Boolean, Integer, text, ForeignKey
 
 
 class Projects(Base):
@@ -22,5 +22,6 @@ class ProjectStatus(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     is_completion = Column(Boolean, nullable=False, server_default=text("false"), default=False)
+    display_order = Column(Integer, nullable=False, server_default=text("0"), default=0)
     created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'))
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=text('now()'), server_default=text('now()'))
