@@ -4,25 +4,31 @@ from uuid import UUID
 from datetime import datetime
 import enum
 
-class UserRegister(BaseModel):
-    first_name: Annotated[str, Field(..., min_length=1, example="John")]
-    last_name: Annotated[str, Field(..., min_length=1, example="Dwane")]
+class MemberSignup(BaseModel):
+    display_name: Annotated[str, Field(..., min_length=1, max_length=255, examples=["John Dwane"])]
     email: Annotated[EmailStr, Field(..., examples=["abc@gmail.com"])]
-    password: Annotated[str, Field(..., examples=["strongpassword"])]
+    password: Annotated[str, Field(..., min_length=8, examples=["strongpassword"])]
+    time_zone: Annotated[str, Field(..., min_length=1, examples=["Asia/Kolkata"])]
 
-class UserResponse(BaseModel):
-    user_id: UUID
-    first_name: str
-    last_name: str
+class MemberResponse(BaseModel):
+    member_id: UUID
     email: EmailStr
+    display_name: str
+    time_zone: str
 
-class UserLoginResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str
-    expires_at: datetime
-    user_id: UUID
-    refresh_token_expires_at: datetime
+class MemberLogin(BaseModel):
+    email: EmailStr
+    password: Annotated[str, Field(..., min_length=1)]
+
+
+class MemberProfileUpdate(BaseModel):
+    display_name: Annotated[str | None, Field(default=None, min_length=1, max_length=255)]
+    time_zone: Annotated[str | None, Field(default=None, min_length=1)]
+
+
+class MemberPasswordUpdate(BaseModel):
+    current_password: Annotated[str, Field(..., min_length=1)]
+    new_password: Annotated[str, Field(..., min_length=8)]
 
 class UserRoleEnum(str, enum.Enum):
     GENERAL="General"

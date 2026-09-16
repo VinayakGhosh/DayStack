@@ -82,7 +82,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       {/* User Info & Logout */}
       <div className="p-4 border-t border-border">
         <div className="mb-4 px-4">
-          <p className="font-medium text-foreground">{user?.first_name} {user?.last_name}</p>
+          <p className="font-medium text-foreground">{user?.display_name}</p>
           <p className="text-sm text-muted-foreground truncate">{user?.email}</p>
         </div>
         <Button
