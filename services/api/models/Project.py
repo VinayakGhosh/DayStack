@@ -21,5 +21,6 @@ class ProjectStatus(Base):
     project_id = Column(UUID, ForeignKey("projects.project_id", ondelete="CASCADE"), nullable=False)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
+    is_completion = Column(Boolean, nullable=False, server_default=text("false"), default=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'))
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=text('now()'), server_default=text('now()'))

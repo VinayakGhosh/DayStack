@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from db.db import get_db
 from lib.auth import get_current_user
-from lib.subscription import require_active_subscription
 from schema.task import MoveTaskStatusResponse, PatchTask, PatchTaskStatus, TaskCreateSchema, TaskResponseSchema
 from task_workspace.service import TaskWorkspace
 from task_workspace.sqlalchemy_repository import (
@@ -32,13 +31,11 @@ def _raise_workspace_error(error: Exception) -> None:
 def create_task(
     payload: TaskCreateSchema,
     db: Session = Depends(get_db),
-    subscription=Depends(require_active_subscription),
     current_user=Depends(get_current_user),
 ):
     try:
         return _workspace(db).create_task(
-            current_user.user_id, payload.project_id, payload.assigned_to,
-            payload.name, payload.description, subscription.plan_id,
+            current_user.user_id, payload.project_id, payload.name, payload.description,
         )
     except (WorkspaceForbidden, WorkspaceNotFound) as error:
         _raise_workspace_error(error)

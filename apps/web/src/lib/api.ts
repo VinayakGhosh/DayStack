@@ -121,7 +121,7 @@ export const authApi = {
 export const projectsApi = {
   getAll: () => apiRequest<Project[]>('/v1/project/'),
 
-  getById: (id: string) => apiRequest<Project>(`/v1/project/?project_id=${id}`),
+  getById: (id: string) => apiRequest<Project[]>(`/v1/project/?project_id=${id}`),
 
   create: (data: { name: string; description?: string }) =>
     apiRequest<Project>('/v1/project/', {
@@ -231,6 +231,7 @@ export interface ProjectStatus {
   project_id: string;
   name: string;
   description?: string;
+  is_completion: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -243,7 +244,6 @@ export interface Task {
   status_id: string | null;
   status_name?: string | null;
   created_by: string;
-  assigned_to?: string | null;
   created_at: string;
   updated_at: string;
 }

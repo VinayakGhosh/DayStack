@@ -4,17 +4,12 @@ Only this adapter knows about ORM models.  HTTP handlers work with the
 TaskWorkspace application service instead of mutating models directly.
 """
 
-from datetime import datetime, timezone
-
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models.Project import ProjectStatus, Projects
 from models.Task import Tasks
 from models.Task import TaskStatusHistory
-from models.plan import Plans
-from models.user import Usage, Users
-from schema.stats import FeatureNameEnum
 
 
 class WorkspaceNotFound(Exception):
@@ -39,7 +34,7 @@ class SqlAlchemyTaskWorkspaceRepository:
             .join(Projects, ProjectStatus.project_id == Projects.project_id)
             .filter(
                 Projects.owner_user_id == member_id,
-                ProjectStatus.name.ilike("done"),
+                ProjectStatus.is_completion == True,
             )
             .subquery()
         )
@@ -70,9 +65,14 @@ class SqlAlchemyTaskWorkspaceRepository:
         for status in (
             ("Todo", "Task is not yet started"),
             ("In Progress", "Task is actively being worked on"),
-            ("Done", "Task has been completed"),
+            ("Done", "Task has been completed", True),
         ):
-            self._db.add(ProjectStatus(project_id=project.project_id, name=status[0], description=status[1]))
+            self._db.add(ProjectStatus(
+                project_id=project.project_id,
+                name=status[0],
+                description=status[1],
+                is_completion=len(status) > 2 and status[2],
+            ))
         self._db.commit()
         self._db.refresh(project)
         return project
@@ -145,30 +145,13 @@ class SqlAlchemyTaskWorkspaceRepository:
         self._db.delete(status)
         self._db.commit()
 
-    def create_task(self, member_id, project_id, assigned_to, name, description, plan_id):
+    def create_task(self, member_id, project_id, name, description):
         self._personal_project(member_id, project_id)
-        if assigned_to is not None and not self._db.query(Users).filter(Users.user_id == assigned_to).first():
-            raise WorkspaceNotFound("Assigned user not found")
-        plan = self._db.query(Plans).filter(Plans.plan_id == plan_id).first()
-        if not plan:
-            raise WorkspaceNotFound("No plan found for this subscription")
-        today = datetime.now(timezone.utc).date()
-        usage = self._db.query(Usage).filter(
-            Usage.date == today,
-            Usage.feature_name == FeatureNameEnum.TASK.value,
-            Usage.user_id == member_id,
-        ).first()
-        if usage and plan.task_per_day >= 0 and usage.feature_count >= plan.task_per_day:
-            raise WorkspaceForbidden("Task limit exceeded for today")
-        if usage:
-            usage.feature_count += 1
-        else:
-            self._db.add(Usage(user_id=member_id, feature_name=FeatureNameEnum.TASK.value, feature_count=1, date=today))
         todo = self._db.query(ProjectStatus).filter(
             ProjectStatus.project_id == project_id,
             ProjectStatus.name.ilike("todo"),
         ).first()
-        task = Tasks(project_id=project_id, created_by=member_id, assigned_to=assigned_to,
+        task = Tasks(project_id=project_id, created_by=member_id, assigned_to=None,
                      status_id=todo.status_id if todo else None, status_name=todo.name if todo else None,
                      name=name, description=description)
         self._db.add(task)
@@ -270,7 +253,6 @@ class SqlAlchemyTaskWorkspaceRepository:
             "status_id": task.status_id,
             "status_name": task.status_name,
             "created_by": task.created_by,
-            "assigned_to": task.assigned_to,
             "name": task.name,
             "description": task.description,
             "created_at": task.created_at,

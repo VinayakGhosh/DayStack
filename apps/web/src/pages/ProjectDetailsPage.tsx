@@ -171,12 +171,13 @@ const ProjectDetailsPage = () => {
       projectStatusApi.getAll(id),
     ]);
 
-    if (projectRes.error || !projectRes.data) {
+    const project = projectRes.data?.[0];
+    if (projectRes.error || !project) {
       setIsLoading(false);
       return;
     }
 
-    setProject(projectRes.data);
+    setProject(project);
     setStatuses(statusesRes.data || []);
     setTasks(tasksRes.data || []);
     setIsLoading(false);

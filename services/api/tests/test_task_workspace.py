@@ -21,6 +21,22 @@ class InMemoryWorkspaceRepository:
         self.projects[project["project_id"]] = project
         return project
 
+    def update_project(self, member_id, project_id, name, description):
+        project = self.projects[project_id]
+        if project["member_id"] != member_id:
+            raise PermissionError("Not authorized to access this project")
+        if name is not None:
+            project["name"] = name
+        if description is not None:
+            project["description"] = description
+        return project
+
+    def delete_project(self, member_id, project_id):
+        project = self.projects[project_id]
+        if project["member_id"] != member_id:
+            raise PermissionError("Not authorized to access this project")
+        del self.projects[project_id]
+
     def move_task_to_status(self, member_id, task_id, status_id):
         return {
             "task_id": task_id,
@@ -57,3 +73,15 @@ class TaskWorkspaceTests(unittest.TestCase):
         self.assertEqual(result["status_id"], status_id)
         self.assertEqual(result["status_name"], "In Progress")
         self.assertEqual(result["member_id"], member_id)
+
+    def test_member_can_update_and_delete_their_project_through_the_workspace(self):
+        repository = InMemoryWorkspaceRepository()
+        workspace = TaskWorkspace(repository)
+        member_id = uuid4()
+        project = workspace.create_project(member_id, "Client launch", None)
+
+        updated = workspace.update_project(member_id, project["project_id"], "Product launch", None)
+        workspace.delete_project(member_id, project["project_id"])
+
+        self.assertEqual(updated["name"], "Product launch")
+        self.assertEqual(workspace.list_projects(member_id), [])

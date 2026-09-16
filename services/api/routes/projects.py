@@ -150,27 +150,12 @@ def update_project_details(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    user_project = _get_project_or_404(db, project_id)
-
-    if user_project.organization_id:
-        organization = db.query(Organization).filter(
-            Organization.organization_id == user_project.organization_id
-        ).first()
-        if not organization:
-            raise HTTPException(status_code=404, detail="Organization not found")
-        ensure_org_owner_or_admin(db, organization, current_user.user_id)
-    else:
-        if user_project.owner_user_id != current_user.user_id:
-            raise HTTPException(status_code=403, detail="Not authorized to update this project")
-
-    if payload.name is not None:
-        user_project.name = payload.name
-    if payload.description is not None:
-        user_project.description = payload.description
-
-    db.commit()
-    db.refresh(user_project)
-    return user_project
+    try:
+        return _workspace(db).update_project(
+            current_user.user_id, project_id, payload.name, payload.description
+        )
+    except (WorkspaceForbidden, WorkspaceNotFound) as error:
+        _raise_workspace_error(error)
 
 
 @router.get("/", response_model=List[ProjectResponse])
@@ -275,22 +260,10 @@ def delete_project(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    user_project = _get_project_or_404(db, project_id)
-
-    if user_project.organization_id:
-        organization = db.query(Organization).filter(
-            Organization.organization_id == user_project.organization_id
-        ).first()
-        if not organization:
-            raise HTTPException(status_code=404, detail="Organization not found")
-        ensure_org_owner_or_admin(db, organization, current_user.user_id)
-    else:
-        if user_project.owner_user_id != current_user.user_id:
-            raise HTTPException(status_code=403, detail="Not authorized to delete this project")
-
-    user_project.isDelete = True
-    db.commit()
-    return
+    try:
+        _workspace(db).delete_project(current_user.user_id, project_id)
+    except (WorkspaceForbidden, WorkspaceNotFound) as error:
+        _raise_workspace_error(error)
 
 
 # ---------------------------------------------------------------------------

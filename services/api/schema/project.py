@@ -47,6 +47,7 @@ class ProjectStatusResponse(BaseModel):
     project_id: UUID
     name: str
     description: Optional[str]
+    is_completion: bool
     created_at: datetime
     updated_at: datetime
 
