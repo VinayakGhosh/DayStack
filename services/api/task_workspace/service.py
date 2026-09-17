@@ -20,6 +20,9 @@ class TaskWorkspace:
     def create_project(self, member_id: UUID, name: str, description: str | None):
         return self._repository.create_project(member_id, name, description)
 
+    def project_quota(self, member_id: UUID):
+        return self._repository.project_quota(member_id)
+
     def move_task_to_status(self, member_id: UUID, task_id: UUID, status_id: UUID):
         return self._repository.move_task_to_status(member_id, task_id, status_id)
 
@@ -35,11 +38,32 @@ class TaskWorkspace:
     def create_status(self, member_id: UUID, project_id: UUID, name: str, description: str | None):
         return self._repository.create_status(member_id, project_id, name, description)
 
-    def update_status(self, member_id: UUID, project_id: UUID, status_id: UUID, name: str | None, description: str | None):
-        return self._repository.update_status(member_id, project_id, status_id, name, description)
+    def update_status(
+        self,
+        member_id: UUID,
+        project_id: UUID,
+        status_id: UUID,
+        name: str | None,
+        description: str | None,
+        is_completion: bool | None = None,
+    ):
+        return self._repository.update_status(
+            member_id, project_id, status_id, name, description, is_completion
+        )
 
-    def delete_status(self, member_id: UUID, project_id: UUID, status_id: UUID):
-        return self._repository.delete_status(member_id, project_id, status_id)
+    def reorder_statuses(self, member_id: UUID, project_id: UUID, status_ids: list[UUID]):
+        return self._repository.reorder_statuses(member_id, project_id, status_ids)
+
+    def delete_status(
+        self,
+        member_id: UUID,
+        project_id: UUID,
+        status_id: UUID,
+        reassign_to_status_id: UUID | None = None,
+    ):
+        return self._repository.delete_status(
+            member_id, project_id, status_id, reassign_to_status_id
+        )
 
     def create_task(self, member_id: UUID, project_id: UUID, name: str, description: str | None):
         return self._repository.create_task(member_id, project_id, name, description)

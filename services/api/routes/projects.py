@@ -15,7 +15,10 @@ from schema.project import (
     ProjectCreateResponse,
     ProjectStatusResponse,
     CreateProjectStatus,
+    DeleteProjectStatus,
     PatchProjectStatus,
+    ProjectQuotaResponse,
+    ReorderProjectStatuses,
 )
 from pydantic import UUID4
 from typing import List, Optional
@@ -25,6 +28,7 @@ from task_workspace.sqlalchemy_repository import (
     WorkspaceConflict,
     WorkspaceForbidden,
     WorkspaceNotFound,
+    WorkspaceProblem,
 )
 
 
@@ -36,11 +40,12 @@ def _workspace(db: Session) -> TaskWorkspace:
 
 
 def _raise_workspace_error(error: Exception) -> None:
-    if isinstance(error, WorkspaceConflict):
-        raise HTTPException(status_code=409, detail=str(error)) from error
-    if isinstance(error, WorkspaceForbidden):
-        raise HTTPException(status_code=403, detail=str(error)) from error
-    raise HTTPException(status_code=404, detail=str(error)) from error
+    if isinstance(error, WorkspaceProblem):
+        raise HTTPException(
+            status_code=error.status_code,
+            detail={"code": error.code, "message": str(error)},
+        ) from error
+    raise error
 
 
 def _project_response(result) -> ProjectResponse:
@@ -109,9 +114,12 @@ def create_project(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    workspace = _workspace(db)
-    project = workspace.create_project(current_user.user_id, payload.name, payload.description)
-    return _project_response(workspace.get_project(current_user.user_id, project.project_id))
+    try:
+        workspace = _workspace(db)
+        project = workspace.create_project(current_user.user_id, payload.name, payload.description)
+        return _project_response(workspace.get_project(current_user.user_id, project.project_id))
+    except WorkspaceProblem as error:
+        _raise_workspace_error(error)
 
 
 @router.post("/organization", response_model=ProjectCreateResponse)
@@ -177,18 +185,34 @@ def update_project_details(
 
 @router.get("/", response_model=List[ProjectResponse])
 def get_project(
-    project_id: Optional[UUID4] = None,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     results = _workspace(db).list_projects(current_user.user_id)
-    if project_id is not None:
-        results = [result for result in results if result[0].project_id == project_id]
-
     response = []
     for project, total_tasks, completed_tasks in results:
         response.append(_project_response((project, total_tasks, completed_tasks)))
     return response
+
+
+@router.get("/usage", response_model=ProjectQuotaResponse)
+def get_project_quota(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return _workspace(db).project_quota(current_user.user_id)
+
+
+@router.get("/{project_id}", response_model=ProjectResponse)
+def get_project_details(
+    project_id: UUID4 = Path(..., description="project_id of the Project"),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    try:
+        return _project_response(_workspace(db).get_project(current_user.user_id, project_id))
+    except WorkspaceProblem as error:
+        _raise_workspace_error(error)
 
 
 @router.get("/organization", response_model=List[ProjectResponse])
@@ -312,9 +336,29 @@ def update_project_status(
 ):
     try:
         return _workspace(db).update_status(
-            current_user.user_id, project_id, status_id, payload.name, payload.description
+            current_user.user_id,
+            project_id,
+            status_id,
+            payload.name,
+            payload.description,
+            payload.is_completion,
         )
-    except (WorkspaceForbidden, WorkspaceNotFound) as error:
+    except WorkspaceProblem as error:
+        _raise_workspace_error(error)
+
+
+@router.put("/{project_id}/statuses/reorder", response_model=List[ProjectStatusResponse])
+def reorder_project_statuses(
+    payload: ReorderProjectStatuses,
+    project_id: UUID4 = Path(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    try:
+        return _workspace(db).reorder_statuses(
+            current_user.user_id, project_id, payload.status_ids
+        )
+    except WorkspaceProblem as error:
         _raise_workspace_error(error)
 
 
@@ -322,10 +366,16 @@ def update_project_status(
 def delete_project_status(
     project_id: UUID4 = Path(...),
     status_id: UUID4 = Path(...),
+    payload: DeleteProjectStatus | None = None,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     try:
-        _workspace(db).delete_status(current_user.user_id, project_id, status_id)
-    except (WorkspaceConflict, WorkspaceForbidden, WorkspaceNotFound) as error:
+        _workspace(db).delete_status(
+            current_user.user_id,
+            project_id,
+            status_id,
+            payload.reassign_to_status_id if payload else None,
+        )
+    except WorkspaceProblem as error:
         _raise_workspace_error(error)

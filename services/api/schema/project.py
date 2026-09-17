@@ -64,3 +64,18 @@ class CreateProjectStatus(BaseModel):
 class PatchProjectStatus(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    is_completion: Optional[bool] = None
+
+
+class ReorderProjectStatuses(BaseModel):
+    status_ids: list[UUID]
+
+
+class DeleteProjectStatus(BaseModel):
+    reassign_to_status_id: Optional[UUID] = None
+
+
+class ProjectQuotaResponse(BaseModel):
+    used: int
+    limit: int
+    remaining: int
