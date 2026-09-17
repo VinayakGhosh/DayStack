@@ -1,6 +1,6 @@
 import uuid
 from db.db import Base
-from sqlalchemy import Column, TIMESTAMP, String, UUID, Boolean, text, ForeignKey
+from sqlalchemy import Column, TIMESTAMP, String, UUID, Boolean, Date, Integer, text as sql_text, ForeignKey, UniqueConstraint
 
 
 class Tasks(Base):
@@ -13,9 +13,11 @@ class Tasks(Base):
     assigned_to = Column(UUID, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True, default="No description")
-    isDelete = Column(Boolean, nullable=False, server_default=text("false"), default=False)
-    created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'))
-    updated_at = Column(TIMESTAMP(timezone=True), onupdate=text('now()'), server_default=text('now()'))
+    due_date = Column(Date, nullable=True)
+    priority = Column(String, nullable=False, server_default=sql_text("'none'"), default="none")
+    isDelete = Column(Boolean, nullable=False, server_default=sql_text("false"), default=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=sql_text('now()'))
+    updated_at = Column(TIMESTAMP(timezone=True), onupdate=sql_text('now()'), server_default=sql_text('now()'))
 
 
 class TaskStatusHistory(Base):
@@ -27,7 +29,7 @@ class TaskStatusHistory(Base):
     new_status_id = Column(UUID, ForeignKey("project_statuses.status_id", ondelete="SET NULL"), nullable=True)
     new_status_name = Column(String, nullable=True)
     changed_by = Column(UUID, ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=sql_text('now()'))
 
 
 class TaskComment(Base):
@@ -36,5 +38,37 @@ class TaskComment(Base):
     task_id = Column(UUID, ForeignKey("tasks.task_id", ondelete="CASCADE"), nullable=False)
     user_id = Column(UUID, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     description_text = Column(String, nullable=False)
-    created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'))
-    updated_at = Column(TIMESTAMP(timezone=True), onupdate=text('now()'), server_default=text('now()'))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=sql_text('now()'))
+    updated_at = Column(TIMESTAMP(timezone=True), onupdate=sql_text('now()'), server_default=sql_text('now()'))
+
+
+class Labels(Base):
+    __tablename__ = "labels"
+    __table_args__ = (UniqueConstraint("member_id", "name", name="uq_labels_member_name"),)
+
+    label_id = Column(UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4)
+    member_id = Column(UUID, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    color = Column(String, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=sql_text('now()'))
+    updated_at = Column(TIMESTAMP(timezone=True), onupdate=sql_text('now()'), server_default=sql_text('now()'))
+
+
+class TaskLabels(Base):
+    __tablename__ = "task_labels"
+    __table_args__ = (UniqueConstraint("task_id", "label_id", name="uq_task_labels_task_label"),)
+
+    task_id = Column(UUID, ForeignKey("tasks.task_id", ondelete="CASCADE"), primary_key=True)
+    label_id = Column(UUID, ForeignKey("labels.label_id", ondelete="CASCADE"), primary_key=True)
+
+
+class Subtasks(Base):
+    __tablename__ = "subtasks"
+
+    subtask_id = Column(UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4)
+    task_id = Column(UUID, ForeignKey("tasks.task_id", ondelete="CASCADE"), nullable=False, index=True)
+    text = Column(String, nullable=False)
+    display_order = Column(Integer, nullable=False)
+    is_completed = Column(Boolean, nullable=False, server_default="false", default=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=sql_text('now()'))
+    updated_at = Column(TIMESTAMP(timezone=True), onupdate=sql_text('now()'), server_default=sql_text('now()'))
