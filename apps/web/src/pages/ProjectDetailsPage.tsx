@@ -22,7 +22,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { projectsApi, projectStatusApi, tasksApi, Project, Task, ProjectStatus } from '@/lib/api';
+import { labelsApi, projectsApi, projectStatusApi, tasksApi, Project, Task, ProjectStatus, TaskInput, Label as TaskLabel } from '@/lib/api';
 import { ArrowLeft, Plus, Settings2, Trash2, Pencil, X, Check, ChevronLeft, ChevronRight, CircleCheck } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import TaskCard from '@/components/tasks/TaskCard';
@@ -136,6 +136,7 @@ const ProjectDetailsPage = () => {
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [statuses, setStatuses] = useState<ProjectStatus[]>([]);
+  const [labels, setLabels] = useState<TaskLabel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -164,10 +165,11 @@ const ProjectDetailsPage = () => {
     if (!id) return;
     setIsLoading(true);
 
-    const [projectRes, tasksRes, statusesRes] = await Promise.all([
+    const [projectRes, tasksRes, statusesRes, labelsRes] = await Promise.all([
       projectsApi.getById(id),
       tasksApi.getByProject(id),
       projectStatusApi.getAll(id),
+      labelsApi.getAll(),
     ]);
 
     const project = projectRes.data;
@@ -179,6 +181,7 @@ const ProjectDetailsPage = () => {
     setProject(project);
     setStatuses(statusesRes.data || []);
     setTasks(tasksRes.data || []);
+    setLabels(labelsRes.data || []);
     setIsLoading(false);
   }, [id]);
 
@@ -188,14 +191,13 @@ const ProjectDetailsPage = () => {
 
   // ── Task CRUD ──────────────────────────────────────────────────────────────
 
-  const handleCreateTask = async (data: { name: string; description?: string }) => {
+  const handleCreateTask = async (data: TaskInput) => {
     if (!id) return;
     setIsSubmitting(true);
 
     const { data: newTask, error } = await tasksApi.create({
       project_id: id,
-      name: data.name,
-      description: data.description,
+      ...data,
     });
 
     setIsSubmitting(false);
@@ -209,14 +211,11 @@ const ProjectDetailsPage = () => {
     }
   };
 
-  const handleEditTask = async (data: { name: string; description?: string }) => {
+  const handleEditTask = async (data: TaskInput) => {
     if (!editingTask) return;
     setIsSubmitting(true);
 
-    const { data: updatedTask, error } = await tasksApi.update(editingTask.task_id, {
-      name: data.name,
-      description: data.description,
-    });
+    const { data: updatedTask, error } = await tasksApi.update(editingTask.task_id, data);
 
     setIsSubmitting(false);
 
@@ -631,6 +630,7 @@ const ProjectDetailsPage = () => {
         }}
         onSubmit={editingTask ? handleEditTask : handleCreateTask}
         task={editingTask}
+        labels={labels}
         isLoading={isSubmitting}
       />
 

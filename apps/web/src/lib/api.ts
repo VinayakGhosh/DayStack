@@ -150,20 +150,20 @@ export const tasksApi = {
   getByProject: (projectId: string) =>
     apiRequest<Task[]>(`/v1/tasks/?project_id=${projectId}`),
 
-  create: (data: { project_id: string; name: string; description?: string }) =>
+  create: (data: TaskInput & { project_id: string }) =>
     apiRequest<Task>('/v1/tasks/', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  update: (id: string, data: { name?: string; description?: string }) =>
+  update: (id: string, data: Partial<TaskInput>) =>
     apiRequest<Task>(`/v1/tasks/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
 
   moveStatus: (id: string, status_id: string) =>
-    apiRequest<{ task_id: string; status_id: string; status_name: string }>(`/v1/tasks/${id}/move`, {
+    apiRequest<Task>(`/v1/tasks/${id}/move`, {
       method: 'POST',
       body: JSON.stringify({ status_id }),
     }),
@@ -172,6 +172,27 @@ export const tasksApi = {
     apiRequest<void>(`/v1/tasks/${id}`, {
       method: 'DELETE',
     }),
+
+  getUsage: (projectId: string) => apiRequest<TaskQuota>(`/v1/tasks/project/${projectId}/usage`),
+
+  setSubtasks: (taskId: string, subtasks: SubtaskInput[]) =>
+    apiRequest<Task>(`/v1/tasks/${taskId}/subtasks`, { method: 'PUT', body: JSON.stringify(subtasks) }),
+
+  toggleSubtask: (taskId: string, subtaskId: string, is_completed: boolean) =>
+    apiRequest<Subtask>(`/v1/tasks/${taskId}/subtasks/${subtaskId}`, {
+      method: 'PATCH', body: JSON.stringify({ is_completed }),
+    }),
+};
+
+export const labelsApi = {
+  getAll: () => apiRequest<Label[]>('/v1/tasks/labels/'),
+  create: (data: { name: string; color?: string }) => apiRequest<Label>('/v1/tasks/labels/', {
+    method: 'POST', body: JSON.stringify(data),
+  }),
+  update: (id: string, data: { name?: string; color?: string }) => apiRequest<Label>(`/v1/tasks/labels/${id}`, {
+    method: 'PATCH', body: JSON.stringify(data),
+  }),
+  delete: (id: string) => apiRequest<void>(`/v1/tasks/labels/${id}`, { method: 'DELETE' }),
 };
 
 // Subscription endpoints
@@ -227,12 +248,51 @@ export interface Task {
   task_id: string;
   project_id: string;
   name: string;
-  description?: string;
+  description?: string | null;
+  due_date?: string | null;
+  priority: Priority;
+  labels: Label[];
+  subtasks: Subtask[];
   status_id: string | null;
   status_name?: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
+}
+
+export type Priority = 'none' | 'low' | 'medium' | 'high';
+
+export interface Label {
+  label_id: string;
+  name: string;
+  color?: string | null;
+}
+
+export interface Subtask {
+  subtask_id: string;
+  text: string;
+  display_order: number;
+  is_completed: boolean;
+}
+
+export interface SubtaskInput {
+  text: string;
+  is_completed: boolean;
+}
+
+export interface TaskInput {
+  name: string;
+  description?: string | null;
+  due_date?: string | null;
+  priority: Priority;
+  label_ids?: string[];
+  subtasks?: SubtaskInput[];
+}
+
+export interface TaskQuota {
+  used: number;
+  limit: number;
+  remaining: number;
 }
 
 export interface Subscription {

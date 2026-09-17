@@ -4,11 +4,13 @@ Only this adapter knows about ORM models.  HTTP handlers work with the
 TaskWorkspace application service instead of mutating models directly.
 """
 
+from datetime import date
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from models.Project import ProjectStatus, Projects
-from models.Task import Tasks
+from models.Task import Labels, Subtasks, TaskLabels, Tasks
 from models.Task import TaskStatusHistory
 from models.user import Users
 
@@ -47,6 +49,12 @@ class WorkspaceProjectLimitReached(WorkspaceConflict):
     """A Member already owns the maximum number of active Projects."""
 
     code = "project_limit_reached"
+
+
+class WorkspaceTaskLimitReached(WorkspaceConflict):
+    """A Project already has the maximum number of active Tasks."""
+
+    code = "task_limit_reached"
 
 
 class SqlAlchemyTaskWorkspaceRepository:
@@ -284,16 +292,19 @@ class SqlAlchemyTaskWorkspaceRepository:
             remaining_status.display_order = display_order
         self._db.commit()
 
-    def create_task(self, member_id, project_id, name, description):
-        self._personal_project(member_id, project_id)
+    def create_task(self, member_id, project_id, name, description, due_date=None, priority="none", label_ids=None, subtasks=None):
+        self._locked_personal_project(member_id, project_id)
+        self._ensure_task_capacity(project_id)
         todo = self._db.query(ProjectStatus).filter(
             ProjectStatus.project_id == project_id,
         ).order_by(ProjectStatus.display_order, ProjectStatus.created_at).first()
         task = Tasks(project_id=project_id, created_by=member_id, assigned_to=None,
                      status_id=todo.status_id if todo else None, status_name=todo.name if todo else None,
-                     name=name, description=description)
+                     name=name, description=description, due_date=self._date(due_date), priority=self._priority(priority))
         self._db.add(task)
         self._db.flush()
+        self._set_task_labels(member_id, task.task_id, label_ids or [])
+        self._replace_subtasks(task.task_id, subtasks or [])
         self._db.add(TaskStatusHistory(task_id=task.task_id, old_status_id=None, old_status_name=None,
                                        new_status_id=todo.status_id if todo else None,
                                        new_status_name=todo.name if todo else None, changed_by=member_id))
@@ -301,12 +312,24 @@ class SqlAlchemyTaskWorkspaceRepository:
         self._db.refresh(task)
         return self._task_response(task)
 
-    def update_task(self, member_id, task_id, name, description):
+    def update_task(self, member_id, task_id, name, description, due_date=None, priority=None, label_ids=None, subtasks=None, updated_fields=None):
         task = self._task(member_id, task_id)
-        if name is not None:
+        updated_fields = updated_fields or {field for field, value in {
+            "name": name, "description": description, "due_date": due_date, "priority": priority,
+            "label_ids": label_ids, "subtasks": subtasks,
+        }.items() if value is not None}
+        if "name" in updated_fields:
             task.name = name
-        if description is not None:
+        if "description" in updated_fields:
             task.description = description
+        if "due_date" in updated_fields:
+            task.due_date = self._date(due_date)
+        if "priority" in updated_fields:
+            task.priority = self._priority(priority)
+        if "label_ids" in updated_fields:
+            self._set_task_labels(member_id, task.task_id, label_ids or [])
+        if "subtasks" in updated_fields:
+            self._replace_subtasks(task.task_id, subtasks or [])
         self._db.commit()
         self._db.refresh(task)
         return self._task_response(task)
@@ -328,12 +351,13 @@ class SqlAlchemyTaskWorkspaceRepository:
 
     def delete_task(self, member_id, task_id):
         task = self._task(member_id, task_id)
-        task.isDelete = True
+        self._db.delete(task)
         self._db.commit()
 
     def set_task_status(self, member_id, task_id, status_id):
-        task = self._task(member_id, task_id)
+        task = self._locked_task(member_id, task_id)
         status = self._status(task.project_id, status_id)
+        self._ensure_status_move_capacity(task, status)
         task.status_id = status.status_id
         task.status_name = status.name
         self._db.commit()
@@ -341,8 +365,9 @@ class SqlAlchemyTaskWorkspaceRepository:
         return self._task_response(task)
 
     def move_task_to_status(self, member_id, task_id, status_id):
-        task = self._task(member_id, task_id)
+        task = self._locked_task(member_id, task_id)
         status = self._status(task.project_id, status_id)
+        self._ensure_status_move_capacity(task, status)
         self._db.add(TaskStatusHistory(task_id=task.task_id, old_status_id=task.status_id,
                                        old_status_name=task.status_name, new_status_id=status.status_id,
                                        new_status_name=status.name, changed_by=member_id))
@@ -350,7 +375,62 @@ class SqlAlchemyTaskWorkspaceRepository:
         task.status_name = status.name
         self._db.commit()
         self._db.refresh(task)
-        return {"task_id": task.task_id, "status_id": task.status_id, "status_name": task.status_name}
+        return self._task_response(task)
+
+    def task_quota(self, member_id, project_id):
+        self._personal_project(member_id, project_id)
+        active = self._active_task_count(project_id)
+        return {"used": active, "limit": 30, "remaining": 30 - active}
+
+    def list_labels(self, member_id):
+        return [self._label_response(label) for label in self._db.query(Labels).filter(
+            Labels.member_id == member_id
+        ).order_by(Labels.name).all()]
+
+    def create_label(self, member_id, name, color):
+        label = self._db.query(Labels).filter(Labels.member_id == member_id, Labels.name == name).first()
+        if label is None:
+            label = Labels(member_id=member_id, name=name, color=color)
+            self._db.add(label)
+            self._db.commit()
+            self._db.refresh(label)
+        return self._label_response(label)
+
+    def update_label(self, member_id, label_id, name, color):
+        label = self._label(member_id, label_id)
+        if name is not None:
+            existing = self._db.query(Labels).filter(
+                Labels.member_id == member_id, Labels.name == name, Labels.label_id != label_id
+            ).first()
+            if existing:
+                raise WorkspaceConflict("You already have a Label with this name.", code="label_name_in_use")
+            label.name = name
+        if color is not None:
+            label.color = color
+        self._db.commit()
+        self._db.refresh(label)
+        return self._label_response(label)
+
+    def delete_label(self, member_id, label_id):
+        self._db.delete(self._label(member_id, label_id))
+        self._db.commit()
+
+    def set_subtasks(self, member_id, task_id, subtasks):
+        task = self._task(member_id, task_id)
+        self._replace_subtasks(task.task_id, subtasks)
+        self._db.commit()
+        return self._task_response(task)
+
+    def toggle_subtask(self, member_id, task_id, subtask_id, is_completed):
+        self._task(member_id, task_id)
+        subtask = self._db.query(Subtasks).filter(
+            Subtasks.subtask_id == subtask_id, Subtasks.task_id == task_id
+        ).first()
+        if subtask is None:
+            raise WorkspaceNotFound("Subtask not found")
+        subtask.is_completed = is_completed
+        self._db.commit()
+        return self._subtask_response(subtask)
 
     def _personal_project(self, member_id, project_id):
         project = self._db.query(Projects).filter(
@@ -386,6 +466,11 @@ class SqlAlchemyTaskWorkspaceRepository:
             raise WorkspaceNotFound("Task not found")
         return task
 
+    def _locked_task(self, member_id, task_id):
+        task = self._task(member_id, task_id)
+        self._locked_personal_project(member_id, task.project_id)
+        return task
+
     def _status(self, project_id, status_id):
         status = self._db.query(ProjectStatus).filter(
             ProjectStatus.status_id == status_id,
@@ -415,6 +500,88 @@ class SqlAlchemyTaskWorkspaceRepository:
             "created_by": task.created_by,
             "name": task.name,
             "description": task.description,
+            "due_date": task.due_date,
+            "priority": task.priority,
+            "labels": [self._label_response(label) for label in self._db.query(Labels).join(
+                TaskLabels, Labels.label_id == TaskLabels.label_id
+            ).filter(TaskLabels.task_id == task.task_id).order_by(Labels.name).all()],
+            "subtasks": [self._subtask_response(subtask) for subtask in self._db.query(Subtasks).filter(
+                Subtasks.task_id == task.task_id
+            ).order_by(Subtasks.display_order).all()],
             "created_at": task.created_at,
             "updated_at": task.updated_at,
         }
+
+    def _active_task_count(self, project_id):
+        completion_statuses = select(ProjectStatus.status_id).where(
+            ProjectStatus.project_id == project_id,
+            ProjectStatus.is_completion.is_(True),
+        )
+        return self._db.query(Tasks).filter(
+            Tasks.project_id == project_id,
+            Tasks.isDelete.is_(False),
+            ~Tasks.status_id.in_(completion_statuses),
+        ).count()
+
+    def _ensure_task_capacity(self, project_id):
+        if self._active_task_count(project_id) >= 30:
+            raise WorkspaceTaskLimitReached("A Project can have up to thirty active Tasks.")
+
+    def _ensure_status_move_capacity(self, task, status):
+        current = self._status(task.project_id, task.status_id) if task.status_id else None
+        if current is not None and current.is_completion and not status.is_completion:
+            self._ensure_task_capacity(task.project_id)
+
+    def _set_task_labels(self, member_id, task_id, label_ids):
+        if len(label_ids) != len(set(label_ids)):
+            raise WorkspaceConflict("A Label can only be applied once.", code="duplicate_label")
+        labels = [self._label(member_id, label_id) for label_id in label_ids]
+        self._db.query(TaskLabels).filter(TaskLabels.task_id == task_id).delete()
+        for label in labels:
+            self._db.add(TaskLabels(task_id=task_id, label_id=label.label_id))
+
+    def _replace_subtasks(self, task_id, subtasks):
+        self._db.query(Subtasks).filter(Subtasks.task_id == task_id).delete()
+        for display_order, item in enumerate(subtasks):
+            text_value = item.get("text", "").strip()
+            if not text_value:
+                raise WorkspaceConflict("A Subtask needs text.", code="invalid_subtask")
+            self._db.add(Subtasks(
+                task_id=task_id,
+                text=text_value,
+                display_order=display_order,
+                is_completed=bool(item.get("is_completed", False)),
+            ))
+
+    def _label(self, member_id, label_id):
+        label = self._db.query(Labels).filter(Labels.label_id == label_id).first()
+        if label is None:
+            raise WorkspaceNotFound("Label not found")
+        if label.member_id != member_id:
+            raise WorkspaceForbidden("Not authorized to access this Label")
+        return label
+
+    def _label_response(self, label):
+        return {"label_id": label.label_id, "name": label.name, "color": label.color}
+
+    def _subtask_response(self, subtask):
+        return {
+            "subtask_id": subtask.subtask_id,
+            "text": subtask.text,
+            "display_order": subtask.display_order,
+            "is_completed": subtask.is_completed,
+        }
+
+    def _priority(self, priority):
+        normalized = priority.lower()
+        if normalized not in {"none", "low", "medium", "high"}:
+            raise WorkspaceConflict("Priority must be None, Low, Medium, or High.", code="invalid_priority")
+        return normalized
+
+    def _date(self, due_date):
+        if due_date is None or isinstance(due_date, date):
+            return due_date
+        try:
+            return date.fromisoformat(due_date)
+        except ValueError as error:
+            raise WorkspaceConflict("Due date must be a calendar date.", code="invalid_due_date") from error

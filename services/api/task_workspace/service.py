@@ -65,11 +65,11 @@ class TaskWorkspace:
             member_id, project_id, status_id, reassign_to_status_id
         )
 
-    def create_task(self, member_id: UUID, project_id: UUID, name: str, description: str | None):
-        return self._repository.create_task(member_id, project_id, name, description)
+    def create_task(self, member_id: UUID, project_id: UUID, name: str, description: str | None, due_date=None, priority: str = "none", label_ids=None, subtasks=None):
+        return self._repository.create_task(member_id, project_id, name, description, due_date, priority, label_ids, subtasks)
 
-    def update_task(self, member_id: UUID, task_id: UUID, name: str | None, description: str | None):
-        return self._repository.update_task(member_id, task_id, name, description)
+    def update_task(self, member_id: UUID, task_id: UUID, name: str | None, description: str | None, due_date=None, priority: str | None = None, label_ids=None, subtasks=None, updated_fields=None):
+        return self._repository.update_task(member_id, task_id, name, description, due_date, priority, label_ids, subtasks, updated_fields)
 
     def list_tasks(self, member_id: UUID, task_id: UUID | None, project_id: UUID | None, status_id: UUID | None):
         return self._repository.list_tasks(member_id, task_id, project_id, status_id)
@@ -79,3 +79,24 @@ class TaskWorkspace:
 
     def set_task_status(self, member_id: UUID, task_id: UUID, status_id: UUID):
         return self._repository.set_task_status(member_id, task_id, status_id)
+
+    def task_quota(self, member_id: UUID, project_id: UUID):
+        return self._repository.task_quota(member_id, project_id)
+
+    def list_labels(self, member_id: UUID):
+        return self._repository.list_labels(member_id)
+
+    def create_label(self, member_id: UUID, name: str, color: str | None):
+        return self._repository.create_label(member_id, name, color)
+
+    def update_label(self, member_id: UUID, label_id: UUID, name: str | None, color: str | None):
+        return self._repository.update_label(member_id, label_id, name, color)
+
+    def delete_label(self, member_id: UUID, label_id: UUID):
+        return self._repository.delete_label(member_id, label_id)
+
+    def set_subtasks(self, member_id: UUID, task_id: UUID, subtasks: list[dict]):
+        return self._repository.set_subtasks(member_id, task_id, subtasks)
+
+    def toggle_subtask(self, member_id: UUID, task_id: UUID, subtask_id: UUID, is_completed: bool):
+        return self._repository.toggle_subtask(member_id, task_id, subtask_id, is_completed)

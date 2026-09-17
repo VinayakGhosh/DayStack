@@ -22,7 +22,7 @@ from sqlalchemy.pool import StaticPool
 from db.db import get_db
 from lib.auth import get_current_user
 from models.Project import ProjectStatus, Projects
-from models.Task import TaskStatusHistory, Tasks
+from models.Task import Labels, Subtasks, TaskLabels, TaskStatusHistory, Tasks
 from models.user import Users
 from routes.projects import router as projects_router
 from task_workspace.service import TaskWorkspace
@@ -41,7 +41,7 @@ class ProjectWorkflowTests(unittest.TestCase):
             poolclass=StaticPool,
         )
         event.listen(engine, "connect", lambda connection, _: connection.create_function("now", 0, lambda: "2026-09-17 00:00:00"))
-        for table in (Users.__table__, Projects.__table__, ProjectStatus.__table__, Tasks.__table__, TaskStatusHistory.__table__):
+        for table in (Users.__table__, Projects.__table__, ProjectStatus.__table__, Tasks.__table__, TaskStatusHistory.__table__, Labels.__table__, TaskLabels.__table__, Subtasks.__table__):
             table.create(engine)
         self._session_factory = sessionmaker(bind=engine, autocommit=False, autoflush=False)
         self.db = self._session_factory()
