@@ -17,7 +17,7 @@ from db.db import Base
 from models.user import Users, Subscriptions, Usage
 from models.plan import Plans
 from models.Project import Projects, ProjectStatus
-from models.Task import AttachmentCleanupJobs, Attachments, TaskComment, Tasks
+from models.Task import AttachmentBlobs, Attachments, TaskComment, Tasks
 from models.organization import Organization, OrganizationMember, OrganizationInvitation
 
 

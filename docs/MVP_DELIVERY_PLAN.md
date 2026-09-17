@@ -55,8 +55,8 @@ This plan implements the architecture in small vertical slices. Each slice ends 
 
 ## 6. Add private Attachments
 
-- Add the attachment metadata and storage adapter.
-- Implement signed upload, finalization, download, deletion, type/size validation, and cleanup retries.
+- Add Attachment metadata and one-to-one PostgreSQL Attachment blobs for development.
+- Implement multipart upload, finalization, download, deletion, static-image compression, and type/size validation.
 - Build task-detail attachment states and error handling.
 
 **Done when:** an authorized member can attach/download/delete allowed files while storage keys and credentials never reach the normal application model or logs.
