@@ -195,6 +195,17 @@ export const labelsApi = {
   delete: (id: string) => apiRequest<void>(`/v1/tasks/labels/${id}`, { method: 'DELETE' }),
 };
 
+export const todayApi = {
+  get: () => apiRequest<Today>('/v1/today/'),
+  add: (taskId: string) => apiRequest<Today>('/v1/today/tasks', {
+    method: 'POST', body: JSON.stringify({ task_id: taskId }),
+  }),
+  remove: (taskId: string) => apiRequest<void>(`/v1/today/tasks/${taskId}`, { method: 'DELETE' }),
+  reorder: (taskIds: string[]) => apiRequest<Today>('/v1/today/tasks/reorder', {
+    method: 'PUT', body: JSON.stringify({ task_ids: taskIds }),
+  }),
+};
+
 // Subscription endpoints
 export const subscriptionApi = {
   getCurrent: () => apiRequest<Subscription>('/v1/subscription/current'),
@@ -293,6 +304,19 @@ export interface TaskQuota {
   used: number;
   limit: number;
   remaining: number;
+}
+
+export interface TodaySelectedTask {
+  position: number;
+  task: Task;
+}
+
+export interface Today {
+  local_date: string;
+  selected_tasks: TodaySelectedTask[];
+  due_today: Task[];
+  overdue: Task[];
+  available_tasks: Task[];
 }
 
 export interface Subscription {

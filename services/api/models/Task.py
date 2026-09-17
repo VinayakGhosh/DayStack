@@ -72,3 +72,18 @@ class Subtasks(Base):
     is_completed = Column(Boolean, nullable=False, server_default="false", default=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=sql_text('now()'))
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=sql_text('now()'), server_default=sql_text('now()'))
+
+
+class TodaySelections(Base):
+    __tablename__ = "today_selections"
+    __table_args__ = (
+        UniqueConstraint("member_id", "local_date", "task_id", name="uq_today_selections_member_date_task"),
+        UniqueConstraint("member_id", "local_date", "display_order", name="uq_today_selections_member_date_order"),
+    )
+
+    selection_id = Column(UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4)
+    member_id = Column(UUID, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
+    local_date = Column(Date, nullable=False, index=True)
+    task_id = Column(UUID, ForeignKey("tasks.task_id", ondelete="CASCADE"), nullable=False, index=True)
+    display_order = Column(Integer, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=sql_text('now()'))

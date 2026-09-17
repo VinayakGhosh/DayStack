@@ -4,13 +4,14 @@ Only this adapter knows about ORM models.  HTTP handlers work with the
 TaskWorkspace application service instead of mutating models directly.
 """
 
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from models.Project import ProjectStatus, Projects
-from models.Task import Labels, Subtasks, TaskLabels, Tasks
+from models.Task import Labels, Subtasks, TaskLabels, Tasks, TodaySelections
 from models.Task import TaskStatusHistory
 from models.user import Users
 
@@ -55,6 +56,12 @@ class WorkspaceTaskLimitReached(WorkspaceConflict):
     """A Project already has the maximum number of active Tasks."""
 
     code = "task_limit_reached"
+
+
+class WorkspaceTodayLimitReached(WorkspaceConflict):
+    """A Member already has the maximum number of Today Tasks."""
+
+    code = "today_limit_reached"
 
 
 class SqlAlchemyTaskWorkspaceRepository:
@@ -360,6 +367,8 @@ class SqlAlchemyTaskWorkspaceRepository:
         self._ensure_status_move_capacity(task, status)
         task.status_id = status.status_id
         task.status_name = status.name
+        if status.is_completion:
+            self._db.query(TodaySelections).filter(TodaySelections.task_id == task.task_id).delete()
         self._db.commit()
         self._db.refresh(task)
         return self._task_response(task)
@@ -373,6 +382,8 @@ class SqlAlchemyTaskWorkspaceRepository:
                                        new_status_name=status.name, changed_by=member_id))
         task.status_id = status.status_id
         task.status_name = status.name
+        if status.is_completion:
+            self._db.query(TodaySelections).filter(TodaySelections.task_id == task.task_id).delete()
         self._db.commit()
         self._db.refresh(task)
         return self._task_response(task)
@@ -432,6 +443,72 @@ class SqlAlchemyTaskWorkspaceRepository:
         self._db.commit()
         return self._subtask_response(subtask)
 
+    def get_today(self, member_id, local_date):
+        local_date = self._local_today_date(member_id, local_date)
+        selections = self._today_selections(member_id, local_date)
+        return {
+            "local_date": local_date,
+            "selected_tasks": [
+                {"position": selection.display_order, "task": self._task_response(task)}
+                for selection, task in selections
+            ],
+            "due_today": self._due_tasks(member_id, local_date, overdue=False),
+            "overdue": self._due_tasks(member_id, local_date, overdue=True),
+            "available_tasks": self._available_today_tasks(member_id, local_date),
+        }
+
+    def add_today_task(self, member_id, task_id, local_date):
+        local_date = self._local_today_date(member_id, local_date)
+        self._locked_member(member_id)
+        task = self._today_task(member_id, task_id)
+        selections = self._today_selections(member_id, local_date, locked=True)
+        if any(selection.task_id == task.task_id for selection, _ in selections):
+            raise WorkspaceConflict("Task is already selected for Today.", code="task_already_selected")
+        if len(selections) >= 3:
+            raise WorkspaceTodayLimitReached("Today can contain up to three active Tasks.")
+        self._db.add(TodaySelections(
+            member_id=member_id,
+            local_date=local_date,
+            task_id=task.task_id,
+            display_order=len(selections),
+        ))
+        self._db.commit()
+        return self.get_today(member_id, local_date)
+
+    def remove_today_task(self, member_id, task_id, local_date):
+        local_date = self._local_today_date(member_id, local_date)
+        self._locked_member(member_id)
+        selection = self._db.query(TodaySelections).filter(
+            TodaySelections.member_id == member_id,
+            TodaySelections.local_date == local_date,
+            TodaySelections.task_id == task_id,
+        ).with_for_update().first()
+        if selection is None:
+            raise WorkspaceNotFound("Task is not selected for Today")
+        self._db.delete(selection)
+        self._db.flush()
+        self._renumber_today_selections(member_id, local_date)
+        self._db.commit()
+
+    def reorder_today_tasks(self, member_id, task_ids, local_date):
+        local_date = self._local_today_date(member_id, local_date)
+        self._locked_member(member_id)
+        selections = self._today_selections(member_id, local_date, locked=True)
+        selected_ids = [selection.task_id for selection, _ in selections]
+        if len(task_ids) != len(selected_ids) or set(task_ids) != set(selected_ids):
+            raise WorkspaceConflict(
+                "The Today order must include every selected Task exactly once.",
+                code="invalid_today_order",
+            )
+        by_task_id = {selection.task_id: selection for selection, _ in selections}
+        for offset, task_id in enumerate(task_ids, start=len(task_ids)):
+            by_task_id[task_id].display_order = offset
+        self._db.flush()
+        for position, task_id in enumerate(task_ids):
+            by_task_id[task_id].display_order = position
+        self._db.commit()
+        return self.get_today(member_id, local_date)
+
     def _personal_project(self, member_id, project_id):
         project = self._db.query(Projects).filter(
             Projects.project_id == project_id,
@@ -442,6 +519,27 @@ class SqlAlchemyTaskWorkspaceRepository:
         if project.organization_id is not None or project.owner_user_id != member_id:
             raise WorkspaceForbidden("Not authorized to access this project")
         return project
+
+    def _member(self, member_id):
+        member = self._db.query(Users).filter(Users.user_id == member_id).first()
+        if member is None:
+            raise WorkspaceNotFound("Member not found")
+        return member
+
+    def _locked_member(self, member_id):
+        member = self._db.query(Users).filter(Users.user_id == member_id).with_for_update().first()
+        if member is None:
+            raise WorkspaceNotFound("Member not found")
+        return member
+
+    def _local_today_date(self, member_id, local_date):
+        if local_date is not None:
+            return local_date
+        member = self._member(member_id)
+        try:
+            return datetime.now(ZoneInfo(member.time_zone)).date()
+        except ZoneInfoNotFoundError as error:
+            raise WorkspaceConflict("Member time zone is invalid.", code="invalid_time_zone") from error
 
     def _locked_personal_project(self, member_id, project_id):
         project = self._db.query(Projects).filter(
@@ -464,6 +562,20 @@ class SqlAlchemyTaskWorkspaceRepository:
         ).first()
         if not task:
             raise WorkspaceNotFound("Task not found")
+        return task
+
+    def _today_task(self, member_id, task_id):
+        task = self._db.query(Tasks).join(Projects, Tasks.project_id == Projects.project_id).filter(
+            Tasks.task_id == task_id,
+            Tasks.isDelete.is_(False),
+            Projects.isDelete.is_(False),
+        ).first()
+        if task is None:
+            raise WorkspaceNotFound("Task not found")
+        if task.created_by != member_id or task.project_id is None or task.project_id != self._personal_project(member_id, task.project_id).project_id:
+            raise WorkspaceForbidden("Not authorized to select this Task for Today")
+        if task.status_id is not None and self._status(task.project_id, task.status_id).is_completion:
+            raise WorkspaceConflict("Only active Tasks can be selected for Today.", code="task_not_active")
         return task
 
     def _locked_task(self, member_id, task_id):
@@ -490,6 +602,58 @@ class SqlAlchemyTaskWorkspaceRepository:
             if status.status_id == status_id:
                 return status
         raise WorkspaceNotFound("Status not found or does not belong to this Project")
+
+    def _today_selections(self, member_id, local_date, locked=False):
+        query = self._db.query(TodaySelections, Tasks).join(Tasks, TodaySelections.task_id == Tasks.task_id).filter(
+            TodaySelections.member_id == member_id,
+            TodaySelections.local_date == local_date,
+            Tasks.isDelete.is_(False),
+        ).order_by(TodaySelections.display_order)
+        if locked:
+            query = query.with_for_update()
+        return query.all()
+
+    def _due_tasks(self, member_id, local_date, overdue):
+        completion_statuses = select(ProjectStatus.status_id).where(ProjectStatus.is_completion.is_(True))
+        due_filter = Tasks.due_date < local_date if overdue else Tasks.due_date == local_date
+        return [self._task_response(task) for task in self._db.query(Tasks).join(
+            Projects, Tasks.project_id == Projects.project_id
+        ).filter(
+            Tasks.created_by == member_id,
+            Projects.owner_user_id == member_id,
+            Projects.organization_id.is_(None),
+            Projects.isDelete.is_(False),
+            Tasks.isDelete.is_(False),
+            Tasks.due_date.is_not(None),
+            due_filter,
+            ~Tasks.status_id.in_(completion_statuses),
+        ).order_by(Tasks.due_date, Tasks.created_at).all()]
+
+    def _available_today_tasks(self, member_id, local_date):
+        completion_statuses = select(ProjectStatus.status_id).where(ProjectStatus.is_completion.is_(True))
+        selected_ids = select(TodaySelections.task_id).where(
+            TodaySelections.member_id == member_id,
+            TodaySelections.local_date == local_date,
+        )
+        return [self._task_response(task) for task in self._db.query(Tasks).join(
+            Projects, Tasks.project_id == Projects.project_id
+        ).filter(
+            Tasks.created_by == member_id,
+            Projects.owner_user_id == member_id,
+            Projects.organization_id.is_(None),
+            Projects.isDelete.is_(False),
+            Tasks.isDelete.is_(False),
+            ~Tasks.status_id.in_(completion_statuses),
+            ~Tasks.task_id.in_(selected_ids),
+        ).order_by(Tasks.due_date.is_(None), Tasks.due_date, Tasks.created_at).all()]
+
+    def _renumber_today_selections(self, member_id, local_date):
+        selections = self._today_selections(member_id, local_date, locked=True)
+        for offset, (selection, _) in enumerate(selections, start=len(selections)):
+            selection.display_order = offset
+        self._db.flush()
+        for position, (selection, _) in enumerate(selections):
+            selection.display_order = position
 
     def _task_response(self, task):
         return {

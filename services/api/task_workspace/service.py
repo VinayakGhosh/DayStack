@@ -100,3 +100,15 @@ class TaskWorkspace:
 
     def toggle_subtask(self, member_id: UUID, task_id: UUID, subtask_id: UUID, is_completed: bool):
         return self._repository.toggle_subtask(member_id, task_id, subtask_id, is_completed)
+
+    def get_today(self, member_id: UUID, local_date):
+        return self._repository.get_today(member_id, local_date)
+
+    def add_today_task(self, member_id: UUID, task_id: UUID, local_date):
+        return self._repository.add_today_task(member_id, task_id, local_date)
+
+    def remove_today_task(self, member_id: UUID, task_id: UUID, local_date):
+        return self._repository.remove_today_task(member_id, task_id, local_date)
+
+    def reorder_today_tasks(self, member_id: UUID, task_ids: list[UUID], local_date):
+        return self._repository.reorder_today_tasks(member_id, task_ids, local_date)
