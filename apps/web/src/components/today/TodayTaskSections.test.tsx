@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import TodayTaskSections from './TodayTaskSections';
@@ -46,5 +46,37 @@ describe('TodayTaskSections', () => {
     expect(screen.getByText('Overdue')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Add a Task to Today' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Move Send brief up' })).toBeInTheDocument();
+  });
+
+  it('forwards add, remove, and reorder actions using the visible Today tasks', () => {
+    const onAdd = vi.fn();
+    const onRemove = vi.fn();
+    const onReorder = vi.fn();
+    render(
+      <TodayTaskSections
+        today={{
+          local_date: '2026-09-17',
+          selected_tasks: [
+            { position: 0, task: task('task-1', 'Prepare brief') },
+            { position: 1, task: task('task-2', 'Send brief') },
+          ],
+          due_today: [],
+          overdue: [],
+          available_tasks: [task('task-3', 'Review brief')],
+        }}
+        onAdd={onAdd}
+        onRemove={onRemove}
+        onReorder={onReorder}
+      />
+    );
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Add a Task to Today' }), { target: { value: 'task-3' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move Send brief up' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Prepare brief from Today' }));
+
+    expect(onAdd).toHaveBeenCalledWith('task-3');
+    expect(onReorder).toHaveBeenCalledWith(['task-2', 'task-1']);
+    expect(onRemove).toHaveBeenCalledWith('task-1');
   });
 });

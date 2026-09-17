@@ -223,6 +223,11 @@ class SqlAlchemyTaskWorkspaceRepository:
                     candidate.is_completion = False
             self._db.flush()
             status.is_completion = True
+            self._db.query(TodaySelections).filter(
+                TodaySelections.task_id.in_(
+                    select(Tasks.task_id).where(Tasks.status_id == status_id)
+                )
+            ).delete(synchronize_session=False)
         elif is_completion is False and status.is_completion:
             if sum(candidate.is_completion for candidate in statuses) == 1:
                 raise WorkspaceConflict(
@@ -649,8 +654,8 @@ class SqlAlchemyTaskWorkspaceRepository:
 
     def _renumber_today_selections(self, member_id, local_date):
         selections = self._today_selections(member_id, local_date, locked=True)
-        for offset, (selection, _) in enumerate(selections, start=len(selections)):
-            selection.display_order = offset
+        for temporary_order, (selection, _) in enumerate(selections, start=1):
+            selection.display_order = -temporary_order
         self._db.flush()
         for position, (selection, _) in enumerate(selections):
             selection.display_order = position

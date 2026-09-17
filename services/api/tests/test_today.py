@@ -100,6 +100,37 @@ class TodayTests(ProjectWorkflowTests):
             )
         self.assertEqual(invalid.exception.code, "invalid_today_order")
 
+    def test_removing_a_middle_today_task_preserves_a_contiguous_order(self) -> None:
+        project = self.workspace.create_project(self.member_id, "Client launch", None)
+        tasks = [
+            self.workspace.create_task(self.member_id, project.project_id, f"Task {position}", None)
+            for position in range(3)
+        ]
+        target_date = date(2026, 9, 17)
+        for task in tasks:
+            self.workspace.add_today_task(self.member_id, task["task_id"], target_date)
+
+        self.workspace.remove_today_task(self.member_id, tasks[1]["task_id"], target_date)
+        today = self.workspace.get_today(self.member_id, target_date)
+
+        self.assertEqual(
+            [(item["task"]["name"], item["position"]) for item in today["selected_tasks"]],
+            [("Task 0", 0), ("Task 2", 1)],
+        )
+
+    def test_marking_a_workflow_status_complete_removes_its_today_tasks(self) -> None:
+        project = self.workspace.create_project(self.member_id, "Client launch", None)
+        task = self.workspace.create_task(self.member_id, project.project_id, "Prepare brief", None)
+        target_date = date(2026, 9, 17)
+        self.workspace.add_today_task(self.member_id, task["task_id"], target_date)
+        to_do = self.workspace.list_statuses(self.member_id, project.project_id)[0]
+
+        self.workspace.update_status(
+            self.member_id, project.project_id, to_do.status_id, None, None, is_completion=True
+        )
+
+        self.assertEqual(self.workspace.get_today(self.member_id, target_date)["selected_tasks"], [])
+
 
 class TodayHttpContractTests(ProjectWorkflowTests):
     def setUp(self) -> None:
@@ -139,3 +170,50 @@ class TodayHttpContractTests(ProjectWorkflowTests):
 
         self.assertEqual(limit.status_code, 409)
         self.assertEqual(limit.json()["detail"]["code"], "today_limit_reached")
+
+    def test_today_http_keeps_dates_and_members_isolated_and_supports_reordering(self) -> None:
+        project = self.workspace.create_project(self.member_id, "Client launch", None)
+        first = self.workspace.create_task(self.member_id, project.project_id, "First", None)
+        second = self.workspace.create_task(self.member_id, project.project_id, "Second", None)
+        target_date = "2026-09-17"
+        for task in (first, second):
+            response = self.client.post(
+                f"/v1/today/tasks?local_date={target_date}", json={"task_id": str(task["task_id"])}
+            )
+            self.assertEqual(response.status_code, 200)
+
+        reordered = self.client.put(
+            f"/v1/today/tasks/reorder?local_date={target_date}",
+            json={"task_ids": [str(second["task_id"]), str(first["task_id"])]},
+        )
+        self.assertEqual(reordered.status_code, 200)
+        self.assertEqual(
+            [item["task"]["name"] for item in reordered.json()["selected_tasks"]], ["Second", "First"]
+        )
+        tomorrow = self.client.get("/v1/today/?local_date=2026-09-18")
+        self.assertEqual(tomorrow.json()["selected_tasks"], [])
+
+        other_member_id = uuid4()
+        self.db.add(Users(
+            user_id=other_member_id,
+            first_name="Ravi",
+            last_name="Shah",
+            email="ravi-http@example.com",
+            hashed_password="hash",
+        ))
+        self.db.commit()
+        other_project = self.workspace.create_project(other_member_id, "Private", None)
+        other_task = self.workspace.create_task(other_member_id, other_project.project_id, "Private task", None)
+        forbidden = self.client.post(
+            f"/v1/today/tasks?local_date={target_date}", json={"task_id": str(other_task["task_id"])}
+        )
+        self.assertEqual(forbidden.status_code, 403)
+        self.assertEqual(forbidden.json()["detail"]["code"], "forbidden")
+
+        completion = next(status for status in self.workspace.list_statuses(self.member_id, project.project_id) if status.is_completion)
+        self.workspace.move_task_to_status(self.member_id, first["task_id"], completion.status_id)
+        inactive = self.client.post(
+            f"/v1/today/tasks?local_date={target_date}", json={"task_id": str(first["task_id"])}
+        )
+        self.assertEqual(inactive.status_code, 409)
+        self.assertEqual(inactive.json()["detail"]["code"], "task_not_active")
