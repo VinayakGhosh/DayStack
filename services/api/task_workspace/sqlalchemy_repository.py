@@ -11,7 +11,15 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from models.Project import ProjectStatus, Projects
-from models.Task import Labels, Subtasks, TaskLabels, Tasks, TodaySelections
+from models.Task import (
+    AttachmentCleanupJobs,
+    Attachments,
+    Labels,
+    Subtasks,
+    TaskLabels,
+    Tasks,
+    TodaySelections,
+)
 from models.Task import TaskStatusHistory
 from models.user import Users
 
@@ -62,6 +70,25 @@ class WorkspaceTodayLimitReached(WorkspaceConflict):
     """A Member already has the maximum number of Today Tasks."""
 
     code = "today_limit_reached"
+
+
+class WorkspaceUnsupportedAttachmentType(WorkspaceConflict):
+    """The requested Attachment media type is outside the MVP allow-list."""
+
+    code = "attachment_type_not_allowed"
+
+
+class WorkspaceAttachmentTooLarge(WorkspaceConflict):
+    """The requested Attachment exceeds the 10 MB limit."""
+
+    code = "attachment_too_large"
+
+
+class WorkspaceAttachmentStorageUnavailable(WorkspaceConflict):
+    """Private object storage could not complete a member-visible operation."""
+
+    status_code = 503
+    code = "attachment_storage_unavailable"
 
 
 class SqlAlchemyTaskWorkspaceRepository:
@@ -514,6 +541,92 @@ class SqlAlchemyTaskWorkspaceRepository:
         self._db.commit()
         return self.get_today(member_id, local_date)
 
+    def create_attachment(self, member_id, task_id, attachment_id, filename, media_type, byte_size, storage_key):
+        self._attachment_task(member_id, task_id)
+        attachment = Attachments(
+            attachment_id=attachment_id,
+            task_id=task_id,
+            original_filename=filename,
+            media_type=media_type,
+            byte_size=byte_size,
+            storage_key=storage_key,
+            upload_state="pending",
+        )
+        self._db.add(attachment)
+        self._db.commit()
+        self._db.refresh(attachment)
+        return self._attachment_response(attachment)
+
+    def finalize_attachment(self, member_id, task_id, attachment_id):
+        attachment = self._attachment(member_id, task_id, attachment_id)
+        attachment.upload_state = "available"
+        self._db.commit()
+        self._db.refresh(attachment)
+        return self._attachment_response(attachment)
+
+    def list_attachments(self, member_id, task_id):
+        self._attachment_task(member_id, task_id)
+        return [
+            self._attachment_response(attachment)
+            for attachment in self._db.query(Attachments).filter(
+                Attachments.task_id == task_id
+            ).order_by(Attachments.created_at, Attachments.attachment_id).all()
+        ]
+
+    def attachment_for_download(self, member_id, task_id, attachment_id, pending_allowed=False):
+        attachment = self._attachment(member_id, task_id, attachment_id)
+        if attachment.upload_state != "available" and not pending_allowed:
+            raise WorkspaceConflict("This Attachment is still being uploaded.", code="attachment_pending")
+        return attachment
+
+    def delete_attachment(self, member_id, task_id, attachment_id):
+        attachment = self._attachment(member_id, task_id, attachment_id)
+        storage_key = attachment.storage_key
+        self._db.delete(attachment)
+        self._db.commit()
+        return storage_key
+
+    def attachment_keys_for_task(self, member_id, task_id):
+        self._attachment_task(member_id, task_id)
+        return [key for (key,) in self._db.query(Attachments.storage_key).filter(
+            Attachments.task_id == task_id
+        ).all()]
+
+    def attachment_keys_for_project(self, member_id, project_id):
+        self._personal_project(member_id, project_id)
+        return [key for (key,) in self._db.query(Attachments.storage_key).join(
+            Tasks, Attachments.task_id == Tasks.task_id
+        ).filter(Tasks.project_id == project_id).all()]
+
+    def queue_attachment_cleanup(self, storage_key):
+        existing = self._db.query(AttachmentCleanupJobs).filter(
+            AttachmentCleanupJobs.storage_key == storage_key
+        ).first()
+        if existing is None:
+            self._db.add(AttachmentCleanupJobs(storage_key=storage_key))
+            self._db.commit()
+
+    def pending_attachment_cleanup(self):
+        return self._db.query(AttachmentCleanupJobs).order_by(
+            AttachmentCleanupJobs.created_at, AttachmentCleanupJobs.cleanup_id
+        ).all()
+
+    def complete_attachment_cleanup(self, cleanup_id):
+        cleanup = self._db.query(AttachmentCleanupJobs).filter(
+            AttachmentCleanupJobs.cleanup_id == cleanup_id
+        ).first()
+        if cleanup is not None:
+            self._db.delete(cleanup)
+            self._db.commit()
+
+    def failed_attachment_cleanup(self, cleanup_id):
+        cleanup = self._db.query(AttachmentCleanupJobs).filter(
+            AttachmentCleanupJobs.cleanup_id == cleanup_id
+        ).first()
+        if cleanup is not None:
+            cleanup.attempts += 1
+            self._db.commit()
+
     def _personal_project(self, member_id, project_id):
         project = self._db.query(Projects).filter(
             Projects.project_id == project_id,
@@ -567,6 +680,28 @@ class SqlAlchemyTaskWorkspaceRepository:
         ).first()
         if not task:
             raise WorkspaceNotFound("Task not found")
+        return task
+
+    def _attachment(self, member_id, task_id, attachment_id):
+        self._attachment_task(member_id, task_id)
+        attachment = self._db.query(Attachments).filter(
+            Attachments.attachment_id == attachment_id,
+            Attachments.task_id == task_id,
+        ).first()
+        if attachment is None:
+            raise WorkspaceNotFound("Attachment not found")
+        return attachment
+
+    def _attachment_task(self, member_id, task_id):
+        task = self._db.query(Tasks).join(Projects, Tasks.project_id == Projects.project_id).filter(
+            Tasks.task_id == task_id,
+            Tasks.isDelete.is_(False),
+            Projects.isDelete.is_(False),
+        ).first()
+        if task is None:
+            raise WorkspaceNotFound("Task not found")
+        if task.created_by != member_id or task.project_id is None or task.project_id != self._personal_project(member_id, task.project_id).project_id:
+            raise WorkspaceForbidden("Not authorized to access this Task")
         return task
 
     def _today_task(self, member_id, task_id):
@@ -739,6 +874,16 @@ class SqlAlchemyTaskWorkspaceRepository:
             "text": subtask.text,
             "display_order": subtask.display_order,
             "is_completed": subtask.is_completed,
+        }
+
+    def _attachment_response(self, attachment):
+        return {
+            "attachment_id": attachment.attachment_id,
+            "filename": attachment.original_filename,
+            "media_type": attachment.media_type,
+            "byte_size": attachment.byte_size,
+            "state": attachment.upload_state,
+            "created_at": attachment.created_at,
         }
 
     def _priority(self, priority):

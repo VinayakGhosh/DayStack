@@ -37,6 +37,12 @@ class InMemoryWorkspaceRepository:
             raise PermissionError("Not authorized to access this project")
         del self.projects[project_id]
 
+    def attachment_keys_for_project(self, member_id, project_id):
+        project = self.projects[project_id]
+        if project["member_id"] != member_id:
+            raise PermissionError("Not authorized to access this project")
+        return []
+
     def move_task_to_status(self, member_id, task_id, status_id):
         return {
             "task_id": task_id,

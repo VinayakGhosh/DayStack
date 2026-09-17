@@ -23,6 +23,7 @@ from schema.project import (
 from pydantic import UUID4
 from typing import List, Optional
 from task_workspace.service import TaskWorkspace
+from task_workspace.storage import get_attachment_storage
 from task_workspace.sqlalchemy_repository import (
     SqlAlchemyTaskWorkspaceRepository,
     WorkspaceConflict,
@@ -35,8 +36,8 @@ from task_workspace.sqlalchemy_repository import (
 router = APIRouter()
 
 
-def _workspace(db: Session) -> TaskWorkspace:
-    return TaskWorkspace(SqlAlchemyTaskWorkspaceRepository(db))
+def _workspace(db: Session, storage=None) -> TaskWorkspace:
+    return TaskWorkspace(SqlAlchemyTaskWorkspaceRepository(db), storage)
 
 
 def _raise_workspace_error(error: Exception) -> None:
@@ -288,9 +289,10 @@ def delete_project(
     project_id: UUID4 = Path(..., description="project_id of the project"),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
+    storage=Depends(get_attachment_storage),
 ):
     try:
-        _workspace(db).delete_project(current_user.user_id, project_id)
+        _workspace(db, storage).delete_project(current_user.user_id, project_id)
     except (WorkspaceForbidden, WorkspaceNotFound) as error:
         _raise_workspace_error(error)
 
