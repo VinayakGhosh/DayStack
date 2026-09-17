@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import AttachmentSection from '@/components/tasks/AttachmentSection';
 
 interface TaskModalProps {
   open: boolean;
@@ -145,6 +146,7 @@ const TaskModal = ({ open, onClose, onSubmit, task, labels, isLoading }: TaskMod
                 rows={3}
               />
             </div>
+            {task && <AttachmentSection taskId={task.task_id} />}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>

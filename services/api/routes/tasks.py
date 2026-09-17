@@ -7,6 +7,10 @@ from sqlalchemy.orm import Session
 from db.db import get_db
 from lib.auth import get_current_user
 from schema.task import (
+    AttachmentDownloadResponse,
+    AttachmentInitiate,
+    AttachmentResponse,
+    AttachmentUploadResponse,
     LabelInput,
     LabelResponse,
     PatchLabel,
@@ -20,6 +24,7 @@ from schema.task import (
     ToggleSubtask,
 )
 from task_workspace.service import TaskWorkspace
+from task_workspace.storage import get_attachment_storage
 from task_workspace.sqlalchemy_repository import (
     SqlAlchemyTaskWorkspaceRepository,
     WorkspaceForbidden,
@@ -30,8 +35,8 @@ from task_workspace.sqlalchemy_repository import (
 router = APIRouter()
 
 
-def _workspace(db: Session) -> TaskWorkspace:
-    return TaskWorkspace(SqlAlchemyTaskWorkspaceRepository(db))
+def _workspace(db: Session, storage=None) -> TaskWorkspace:
+    return TaskWorkspace(SqlAlchemyTaskWorkspaceRepository(db), storage)
 
 
 def _raise_workspace_error(error: Exception) -> None:
@@ -83,9 +88,14 @@ def get_tasks(
 
 
 @router.delete("/{task_id}", status_code=204)
-def delete_task(task_id: UUID, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+def delete_task(
+    task_id: UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+    storage=Depends(get_attachment_storage),
+):
     try:
-        _workspace(db).delete_task(current_user.user_id, task_id)
+        _workspace(db, storage).delete_task(current_user.user_id, task_id)
     except WorkspaceProblem as error:
         _raise_workspace_error(error)
 
@@ -159,5 +169,83 @@ def set_subtasks(task_id: UUID, payload: List[SubtaskInput], db: Session = Depen
 def toggle_subtask(task_id: UUID, subtask_id: UUID, payload: ToggleSubtask, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     try:
         return _workspace(db).toggle_subtask(current_user.user_id, task_id, subtask_id, payload.is_completed)
+    except WorkspaceProblem as error:
+        _raise_workspace_error(error)
+
+
+@router.post("/{task_id}/attachments", response_model=AttachmentUploadResponse)
+def initiate_attachment_upload(
+    task_id: UUID,
+    payload: AttachmentInitiate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+    storage=Depends(get_attachment_storage),
+):
+    try:
+        return _workspace(db, storage).initiate_attachment_upload(
+            current_user.user_id,
+            task_id,
+            payload.filename,
+            payload.media_type,
+            payload.byte_size,
+        )
+    except WorkspaceProblem as error:
+        _raise_workspace_error(error)
+
+
+@router.get("/{task_id}/attachments", response_model=list[AttachmentResponse])
+def list_attachments(
+    task_id: UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    try:
+        return _workspace(db).list_attachments(current_user.user_id, task_id)
+    except WorkspaceProblem as error:
+        _raise_workspace_error(error)
+
+
+@router.post("/{task_id}/attachments/{attachment_id}/finalize", response_model=AttachmentResponse)
+def finalize_attachment_upload(
+    task_id: UUID,
+    attachment_id: UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+    storage=Depends(get_attachment_storage),
+):
+    try:
+        return _workspace(db, storage).finalize_attachment_upload(
+            current_user.user_id, task_id, attachment_id
+        )
+    except WorkspaceProblem as error:
+        _raise_workspace_error(error)
+
+
+@router.get("/{task_id}/attachments/{attachment_id}/download", response_model=AttachmentDownloadResponse)
+def download_attachment(
+    task_id: UUID,
+    attachment_id: UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+    storage=Depends(get_attachment_storage),
+):
+    try:
+        return _workspace(db, storage).authorize_attachment_download(
+            current_user.user_id, task_id, attachment_id
+        )
+    except WorkspaceProblem as error:
+        _raise_workspace_error(error)
+
+
+@router.delete("/{task_id}/attachments/{attachment_id}", status_code=204)
+def delete_attachment(
+    task_id: UUID,
+    attachment_id: UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+    storage=Depends(get_attachment_storage),
+):
+    try:
+        _workspace(db, storage).delete_attachment(current_user.user_id, task_id, attachment_id)
     except WorkspaceProblem as error:
         _raise_workspace_error(error)

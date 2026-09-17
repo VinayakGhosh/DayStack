@@ -78,3 +78,30 @@ class TaskQuotaResponse(BaseModel):
     used: int
     limit: int
     remaining: int
+
+
+class AttachmentInitiate(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    media_type: str = Field(min_length=1, max_length=255)
+    byte_size: int = Field(ge=0, le=10 * 1024 * 1024)
+
+
+class AttachmentResponse(BaseModel):
+    attachment_id: UUID
+    filename: str
+    media_type: str
+    byte_size: int
+    state: Literal["pending", "available"]
+    created_at: datetime
+
+
+class AttachmentUploadResponse(BaseModel):
+    attachment: AttachmentResponse
+    upload_url: str
+    upload_expires_at: datetime
+    upload_method: Literal["PUT", "POST"]
+    upload_fields: dict[str, str] | None = None
+
+
+class AttachmentDownloadResponse(BaseModel):
+    download_url: str

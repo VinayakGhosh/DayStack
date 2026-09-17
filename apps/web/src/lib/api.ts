@@ -206,6 +206,23 @@ export const todayApi = {
   }),
 };
 
+export const attachmentApi = {
+  list: (taskId: string) => apiRequest<Attachment[]>(`/v1/tasks/${taskId}/attachments`),
+  initiate: (taskId: string, file: File) => apiRequest<AttachmentUpload>(`/v1/tasks/${taskId}/attachments`, {
+    method: 'POST',
+    body: JSON.stringify({ filename: file.name, media_type: file.type, byte_size: file.size }),
+  }),
+  finalize: (taskId: string, attachmentId: string) => apiRequest<Attachment>(
+    `/v1/tasks/${taskId}/attachments/${attachmentId}/finalize`, { method: 'POST' }
+  ),
+  download: (taskId: string, attachmentId: string) => apiRequest<AttachmentDownload>(
+    `/v1/tasks/${taskId}/attachments/${attachmentId}/download`
+  ),
+  delete: (taskId: string, attachmentId: string) => apiRequest<void>(
+    `/v1/tasks/${taskId}/attachments/${attachmentId}`, { method: 'DELETE' }
+  ),
+};
+
 // Subscription endpoints
 export const subscriptionApi = {
   getCurrent: () => apiRequest<Subscription>('/v1/subscription/current'),
@@ -317,6 +334,27 @@ export interface Today {
   due_today: Task[];
   overdue: Task[];
   available_tasks: Task[];
+}
+
+export interface Attachment {
+  attachment_id: string;
+  filename: string;
+  media_type: string;
+  byte_size: number;
+  state: 'pending' | 'available';
+  created_at: string;
+}
+
+export interface AttachmentUpload {
+  attachment: Attachment;
+  upload_url: string;
+  upload_expires_at?: string;
+  upload_method?: 'PUT' | 'POST';
+  upload_fields?: Record<string, string> | null;
+}
+
+export interface AttachmentDownload {
+  download_url: string;
 }
 
 export interface Subscription {

@@ -87,3 +87,27 @@ class TodaySelections(Base):
     task_id = Column(UUID, ForeignKey("tasks.task_id", ondelete="CASCADE"), nullable=False, index=True)
     display_order = Column(Integer, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=sql_text('now()'))
+
+
+class Attachments(Base):
+    __tablename__ = "attachments"
+
+    attachment_id = Column(UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4)
+    task_id = Column(UUID, ForeignKey("tasks.task_id", ondelete="CASCADE"), nullable=False, index=True)
+    original_filename = Column(String, nullable=False)
+    media_type = Column(String, nullable=False)
+    byte_size = Column(Integer, nullable=False)
+    storage_key = Column(String, nullable=False, unique=True)
+    upload_state = Column(String, nullable=False, server_default=sql_text("'pending'"), default="pending")
+    created_at = Column(TIMESTAMP(timezone=True), server_default=sql_text('now()'))
+    updated_at = Column(TIMESTAMP(timezone=True), onupdate=sql_text('now()'), server_default=sql_text('now()'))
+
+
+class AttachmentCleanupJobs(Base):
+    __tablename__ = "attachment_cleanup_jobs"
+
+    cleanup_id = Column(UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4)
+    storage_key = Column(String, nullable=False, unique=True)
+    attempts = Column(Integer, nullable=False, server_default=sql_text("0"), default=0)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=sql_text('now()'))
+    updated_at = Column(TIMESTAMP(timezone=True), onupdate=sql_text('now()'), server_default=sql_text('now()'))
