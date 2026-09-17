@@ -7,6 +7,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 interface ApiResponse<T> {
   data?: T;
   error?: string;
+  errorCode?: string;
 }
 
 const csrfToken = (): string | undefined =>
@@ -19,7 +20,10 @@ const handleResponse = async <T>(response: Response): Promise<ApiResponse<T>> =>
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     const detail = errorData.detail;
-    return { error: typeof detail === 'string' ? detail : detail?.message || 'An error occurred' };
+    return {
+      error: typeof detail === 'string' ? detail : detail?.message || 'An error occurred',
+      errorCode: typeof detail === 'object' ? detail?.code : undefined,
+    };
   }
 
   const data = await response.json();
@@ -89,7 +93,9 @@ export const authApi = {
 export const projectsApi = {
   getAll: () => apiRequest<Project[]>('/v1/project/'),
 
-  getById: (id: string) => apiRequest<Project[]>(`/v1/project/?project_id=${id}`),
+  getById: (id: string) => apiRequest<Project>(`/v1/project/${id}`),
+
+  getUsage: () => apiRequest<ProjectQuota>('/v1/project/usage'),
 
   create: (data: { name: string; description?: string }) =>
     apiRequest<Project>('/v1/project/', {
@@ -120,15 +126,22 @@ export const projectStatusApi = {
       body: JSON.stringify(data),
     }),
 
-  update: (projectId: string, statusId: string, data: { name?: string; description?: string }) =>
+  update: (projectId: string, statusId: string, data: { name?: string; description?: string; is_completion?: boolean }) =>
     apiRequest<ProjectStatus>(`/v1/project/${projectId}/statuses/${statusId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
 
-  delete: (projectId: string, statusId: string) =>
+  reorder: (projectId: string, statusIds: string[]) =>
+    apiRequest<ProjectStatus[]>(`/v1/project/${projectId}/statuses/reorder`, {
+      method: 'PUT',
+      body: JSON.stringify({ status_ids: statusIds }),
+    }),
+
+  delete: (projectId: string, statusId: string, reassignToStatusId?: string) =>
     apiRequest<void>(`/v1/project/${projectId}/statuses/${statusId}`, {
       method: 'DELETE',
+      ...(reassignToStatusId && { body: JSON.stringify({ reassign_to_status_id: reassignToStatusId }) }),
     }),
 };
 
@@ -202,6 +215,12 @@ export interface ProjectStatus {
   display_order: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProjectQuota {
+  used: number;
+  limit: number;
+  remaining: number;
 }
 
 export interface Task {

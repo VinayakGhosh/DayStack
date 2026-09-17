@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
-import { projectsApi, Project } from '@/lib/api';
+import { projectsApi, Project, ProjectQuota } from '@/lib/api';
 import { Plus, FolderKanban } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ProjectCard from '@/components/projects/ProjectCard';
@@ -22,6 +22,7 @@ import {
 const ProjectsPage = () => {
   const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [quota, setQuota] = useState<ProjectQuota | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -29,9 +30,15 @@ const ProjectsPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchProjects = async () => {
-    const { data, error } = await projectsApi.getAll();
-    if (data) {
-      setProjects(data);
+    const [projectResponse, quotaResponse] = await Promise.all([
+      projectsApi.getAll(),
+      projectsApi.getUsage(),
+    ]);
+    if (projectResponse.data) {
+      setProjects(projectResponse.data);
+    }
+    if (quotaResponse.data) {
+      setQuota(quotaResponse.data);
     }
     setIsLoading(false);
   };
@@ -47,6 +54,11 @@ const ProjectsPage = () => {
 
     if (newProject) {
       setProjects([newProject, ...projects]);
+      setQuota((current) => current && {
+        ...current,
+        used: current.used + 1,
+        remaining: current.remaining - 1,
+      });
       setModalOpen(false);
       toast({ title: 'Project created successfully' });
     } if (error) {
@@ -76,6 +88,11 @@ const ProjectsPage = () => {
 
     if (!error) {
       setProjects(projects.filter((p) => p.project_id !== deletingProject.project_id));
+      setQuota((current) => current && {
+        ...current,
+        used: current.used - 1,
+        remaining: current.remaining + 1,
+      });
       toast({ title: 'Project deleted successfully' });
     } else {
       toast({ title: 'Failed to delete project', description: error, variant: 'destructive' });
@@ -93,6 +110,8 @@ const ProjectsPage = () => {
     );
   }
 
+  const projectLimitReached = quota?.remaining === 0;
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -103,8 +122,13 @@ const ProjectsPage = () => {
             <p className="text-muted-foreground mt-1">
               Manage and organize your projects
             </p>
+            {quota && (
+              <p className="text-sm text-muted-foreground mt-2">
+                {quota.used} of {quota.limit} Projects in use
+              </p>
+            )}
           </div>
-          <Button onClick={() => setModalOpen(true)}>
+          <Button onClick={() => setModalOpen(true)} disabled={projectLimitReached}>
             <Plus className="mr-2 h-4 w-4" />
             New Project
           </Button>
@@ -124,6 +148,11 @@ const ProjectsPage = () => {
               <Plus className="mr-2 h-4 w-4" />
               Create Project
             </Button>
+            {projectLimitReached && (
+              <p className="text-sm text-muted-foreground mt-3">
+                Delete a Project before creating another one.
+              </p>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

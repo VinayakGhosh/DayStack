@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { projectsApi, projectStatusApi, tasksApi, Project, Task, ProjectStatus } from '@/lib/api';
-import { ArrowLeft, Plus, Settings2, Trash2, Pencil, X, Check, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Plus, Settings2, Trash2, Pencil, X, Check, ChevronLeft, ChevronRight, CircleCheck } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import TaskCard from '@/components/tasks/TaskCard';
 import TaskModal from '@/components/tasks/TaskModal';
@@ -45,8 +45,6 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
-
-const MAX_STATUSES = 6;
 
 const COLUMN_BORDER_COLORS = [
   'border-slate-400',
@@ -151,6 +149,7 @@ const ProjectDetailsPage = () => {
   const [editingStatus, setEditingStatus] = useState<ProjectStatus | null>(null);
   const [editingStatusName, setEditingStatusName] = useState('');
   const [deletingStatus, setDeletingStatus] = useState<ProjectStatus | null>(null);
+  const [reassignmentStatusId, setReassignmentStatusId] = useState('');
   const [statusSubmitting, setStatusSubmitting] = useState(false);
 
   // Drag state
@@ -171,7 +170,7 @@ const ProjectDetailsPage = () => {
       projectStatusApi.getAll(id),
     ]);
 
-    const project = projectRes.data?.[0];
+    const project = projectRes.data;
     if (projectRes.error || !project) {
       setIsLoading(false);
       return;
@@ -352,7 +351,6 @@ const ProjectDetailsPage = () => {
 
   const handleCreateStatus = async () => {
     if (!id || !newStatusName.trim()) return;
-    if (statuses.length >= MAX_STATUSES) return;
     setStatusSubmitting(true);
 
     const { data: created, error } = await projectStatusApi.create(id, { name: newStatusName.trim() });
@@ -392,10 +390,22 @@ const ProjectDetailsPage = () => {
 
   const handleDeleteStatus = async () => {
     if (!id || !deletingStatus) return;
-    const { error } = await projectStatusApi.delete(id, deletingStatus.status_id);
+    const taskCount = tasks.filter((task) => task.status_id === deletingStatus.status_id).length;
+    if (taskCount > 0 && !reassignmentStatusId) return;
+    const replacement = statuses.find((status) => status.status_id === reassignmentStatusId);
+    const { error } = await projectStatusApi.delete(
+      id,
+      deletingStatus.status_id,
+      taskCount > 0 ? reassignmentStatusId : undefined,
+    );
 
     if (!error) {
       setStatuses((prev) => prev.filter((s) => s.status_id !== deletingStatus.status_id));
+      if (replacement) {
+        setTasks((prev) => prev.map((task) => task.status_id === deletingStatus.status_id
+          ? { ...task, status_id: replacement.status_id, status_name: replacement.name }
+          : task));
+      }
       toast({ title: `Status "${deletingStatus.name}" deleted` });
     } else {
       toast({
@@ -405,6 +415,41 @@ const ProjectDetailsPage = () => {
       });
     }
     setDeletingStatus(null);
+    setReassignmentStatusId('');
+  };
+
+  const handleChooseCompletionStatus = async (status: ProjectStatus) => {
+    if (!id || status.is_completion) return;
+    setStatusSubmitting(true);
+    const { error } = await projectStatusApi.update(id, status.status_id, { is_completion: true });
+    setStatusSubmitting(false);
+
+    if (error) {
+      toast({ title: 'Failed to choose completion status', description: error, variant: 'destructive' });
+      return;
+    }
+    await fetchData();
+    toast({ title: `"${status.name}" is now the completion status` });
+  };
+
+  const handleReorderStatus = async (statusId: string, direction: -1 | 1) => {
+    if (!id) return;
+    const currentIndex = statuses.findIndex((status) => status.status_id === statusId);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= statuses.length) return;
+
+    const ordered = [...statuses];
+    [ordered[currentIndex], ordered[nextIndex]] = [ordered[nextIndex], ordered[currentIndex]];
+    setStatusSubmitting(true);
+    const { data, error } = await projectStatusApi.reorder(id, ordered.map((status) => status.status_id));
+    setStatusSubmitting(false);
+
+    if (data) {
+      setStatuses(data);
+      toast({ title: 'Workflow status order updated' });
+    } else {
+      toast({ title: 'Failed to reorder statuses', description: error, variant: 'destructive' });
+    }
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -436,8 +481,9 @@ const ProjectDetailsPage = () => {
   }
 
   const totalTasks = tasks.length;
-  const doneTasks = statuses.length > 0
-    ? tasks.filter((t) => t.status_id === statuses[statuses.length - 1].status_id).length
+  const completionStatus = statuses.find((status) => status.is_completion);
+  const doneTasks = completionStatus
+    ? tasks.filter((task) => task.status_id === completionStatus.status_id).length
     : 0;
   const progressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
@@ -616,9 +662,24 @@ const ProjectDetailsPage = () => {
             <AlertDialogTitle>Delete Status</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{deletingStatus?.name}"? This will fail if any tasks
-              are currently using this status.
+              are currently using this status. Choose a replacement before removing it.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {deletingStatus && tasks.some((task) => task.status_id === deletingStatus.status_id) && (
+            <div className="space-y-2">
+              <Label htmlFor="status-reassignment">Move tasks to</Label>
+              <select
+                id="status-reassignment"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={reassignmentStatusId}
+                onChange={(event) => setReassignmentStatusId(event.target.value)}
+              >
+                {statuses.filter((status) => status.status_id !== deletingStatus.status_id).map((status) => (
+                  <option key={status.status_id} value={status.status_id}>{status.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
@@ -692,7 +753,40 @@ const ProjectDetailsPage = () => {
                     ) : (
                       <>
                         <span className="flex-1 text-sm font-medium">{status.name}</span>
+                        {status.is_completion && (
+                          <span className="text-xs text-green-700 dark:text-green-400">Completion</span>
+                        )}
                         <span className="text-xs text-muted-foreground">{taskCount} task{taskCount !== 1 ? 's' : ''}</span>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          onClick={() => handleReorderStatus(status.status_id, -1)}
+                          disabled={idx === 0 || statusSubmitting}
+                          title="Move status left"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          onClick={() => handleReorderStatus(status.status_id, 1)}
+                          disabled={idx === statuses.length - 1 || statusSubmitting}
+                          title="Move status right"
+                        >
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-green-700 dark:text-green-400"
+                          onClick={() => handleChooseCompletionStatus(status)}
+                          disabled={status.is_completion || statusSubmitting}
+                          title={status.is_completion ? 'Completion status' : 'Make completion status'}
+                        >
+                          <CircleCheck className="h-3.5 w-3.5" />
+                        </Button>
                         <Button
                           size="icon"
                           variant="ghost"
@@ -708,9 +802,18 @@ const ProjectDetailsPage = () => {
                           size="icon"
                           variant="ghost"
                           className="h-7 w-7 text-destructive hover:text-destructive"
-                          onClick={() => setDeletingStatus(status)}
-                          disabled={taskCount > 0}
-                          title={taskCount > 0 ? 'Cannot delete: tasks are using this status' : 'Delete status'}
+                          onClick={() => {
+                            setDeletingStatus(status);
+                            setReassignmentStatusId(
+                              statuses.find((candidate) => candidate.status_id !== status.status_id)?.status_id ?? ''
+                            );
+                          }}
+                          disabled={status.is_completion}
+                          title={
+                            status.is_completion
+                                ? 'Choose another completion status before deletion'
+                                : 'Delete status'
+                          }
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -723,14 +826,6 @@ const ProjectDetailsPage = () => {
 
             {/* Add new status */}
             <div className="space-y-3">
-              {statuses.length >= MAX_STATUSES && (
-                <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400">
-                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <p className="text-xs">
-                    Maximum of {MAX_STATUSES} statuses reached. Delete an existing status to add a new one.
-                  </p>
-                </div>
-              )}
               <div className="space-y-1.5">
                 <Label className="text-sm">Add New Status</Label>
                 <div className="flex gap-2">
@@ -739,7 +834,7 @@ const ProjectDetailsPage = () => {
                     onChange={(e) => setNewStatusName(e.target.value)}
                     placeholder="Status name..."
                     className="text-sm"
-                    disabled={statuses.length >= MAX_STATUSES || statusSubmitting}
+                    disabled={statusSubmitting}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleCreateStatus();
                     }}
@@ -749,7 +844,6 @@ const ProjectDetailsPage = () => {
                     onClick={handleCreateStatus}
                     disabled={
                       !newStatusName.trim() ||
-                      statuses.length >= MAX_STATUSES ||
                       statusSubmitting
                     }
                   >
