@@ -31,7 +31,7 @@ const LoginPage = () => {
     setIsLoading(false);
 
     if (result.success) {
-      navigate('/dashboard');
+      navigate('/today');
     } else {
       setError(result.error || 'Login failed');
     }

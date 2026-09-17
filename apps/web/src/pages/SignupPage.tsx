@@ -62,7 +62,7 @@ const SignupPage = () => {
     if (result.success) {
       setSuccess(true);
       setTimeout(() => {
-        navigate('/dashboard');
+        navigate('/today');
       }, 2000);
     } else {
       setError(result.error || 'Registration failed');

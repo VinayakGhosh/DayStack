@@ -9,23 +9,9 @@ class CreateProject(BaseModel):
     description: Optional[str] = None
 
 
-class ProjectCreateResponse(BaseModel):
-    project_id: UUID
-    owner_user_id: UUID
-    organization_id: Optional[UUID]
-    name: str
-    description: Optional[str]
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
 class ProjectResponse(BaseModel):
     project_id: UUID
     owner_user_id: UUID
-    organization_id: Optional[UUID]
     name: str
     description: Optional[str]
     created_at: datetime

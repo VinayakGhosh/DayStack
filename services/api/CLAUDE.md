@@ -1,103 +1,38 @@
-# CLAUDE.md
+# DayStack API
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Project Overview
-
-**proj-task** (v0.3.2) is a SaaS task management REST API with subscription-based access control. Built with FastAPI + PostgreSQL, it enforces per-plan usage limits (project counts, daily task creation limits) and supports multi-tenant organizations.
+DayStack is a personal task-execution MVP. The architectural authority is [../../docs/MVP_ARCHITECTURE.md](../../docs/MVP_ARCHITECTURE.md); use its Member, Project, Task, Today, and Attachment terminology.
 
 ## Commands
 
-### Development
+From `services/api`:
 
 ```bash
-# Start database (PostgreSQL 17 via Docker)
 docker compose up -d
-
-# Run with hot reload
-uvicorn main:app --reload
-# OR use the startup script:
-./start.sh
-
-# Install dependencies
-pip install -r requirements.txt          # Windows
-pip install -r requirements-linux.txt   # Linux/Docker
-```
-
-### Database Migrations
-
-```bash
-# Apply all pending migrations
+.venv\\Scripts\\python.exe -m unittest discover -s tests -v
 alembic upgrade head
-
-# Create a new migration (auto-generate from model changes)
-alembic revision --autogenerate -m "description"
-
-# Rollback one step
-alembic downgrade -1
+uvicorn main:app --reload
 ```
 
-### Docker
+Use `requirements.txt` on Windows and `requirements-linux.txt` for Linux/Docker.
 
-```bash
-docker build -t proj-task .
-docker run -p 8000:8000 proj-task
-```
+## Structure
 
-API docs available at `http://localhost:8000/docs` when running.
+- `routes/` adapts authenticated HTTP requests to Task Workspace; keep handlers thin.
+- `task_workspace/` owns member-visible rules, quotas, ownership checks, workflow status invariants, Today, and Attachment coordination.
+- `task_workspace/sqlalchemy_repository.py` and `task_workspace/storage.py` are internal adapters.
+- `models/` contains the metadata schema; add migrations for schema changes.
+- `schema/` defines versioned request and response DTOs.
 
-## Architecture
+## MVP rules
 
-### Layer Structure
+- Every Project and Task belongs to one Member. There are no shared or organization-scoped member workflows.
+- Quotas are five active Projects and thirty non-completed Tasks per Project.
+- A Project has exactly one completion Workflow status; completion is determined by that status, never its name.
+- Today has at most three active Tasks for a Member-local date.
+- Attachment storage keys and credentials never enter normal API responses or frontend state.
 
-```
-routes/      → FastAPI route handlers (request parsing, response shaping)
-lib/         → Shared dependencies injected into routes (auth, subscription checks)
-schema/      → Pydantic models for request validation and response serialization
-models/      → SQLAlchemy ORM table definitions
-db/db.py     → Engine, session factory, and get_db() dependency
-scheduler.py → APScheduler job: daily subscription expiry check
-main.py      → App factory: registers routers, lifespan (scheduler + default plan seeding)
-```
+## HTTP and tests
 
-### Authentication & Authorization
+All member routes are mounted below `/v1`. Return empty collections instead of `404` and map domain errors to stable problem codes. Test behavior at the Task Workspace seam, then authenticated HTTP contracts for transport and UI-visible outcomes.
 
-`lib/auth.py` provides `get_current_user()` as a FastAPI dependency. All protected routes inject this. Two roles exist: `GENERAL` and `ADMIN`.
-
-JWT tokens: short-lived access tokens + long-lived refresh tokens. Configured via `ACCESS_TOKEN_EXPIRE_MINUTES` and `REFRESH_TOKEN_EXPIRE_DAYS` env vars.
-
-### Subscription Enforcement
-
-`lib/subscription.py` provides `require_active_subscription()` as a dependency. Routes that are gated by plan tier inject this alongside `get_current_user()`.
-
-Usage limits are tracked in the `usage` table (per user, per feature, per day). The `plans` table defines `max_projects` and `task_per_day` limits per tier. When a subscription expires, the scheduler downgrades the user to the Free plan.
-
-### Soft Deletes
-
-Projects and Tasks use an `isDelete` boolean flag — records are never hard-deleted. All list queries must filter `isDelete == False`.
-
-### Key Models
-
-- `users` + `subscriptions` + `usage` → in `models/user.py`
-- `plans` + `projects` + `tasks` → in `models/plan.py`
-- `organizations` + `organization_members` + `organization_invitations` → in `models/organization.py`
-
-### Database Connection
-
-`db/db.py` uses SQLAlchemy with `pool_size=30`, `max_overflow=10`, `pool_recycle=300`, and `pool_pre_ping=True`. The `get_db()` generator yields sessions for route-level dependency injection.
-
-## Environment Variables
-
-Copy `.env-sample` to `.env`. Required variables:
-
-```
-DATABASE_USER, DATABASE_PASSWORD, DATABASE_HOST, DATABASE_PORT, DATABASE_NAME
-SECRET_KEY, ALGORITHM
-ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_TOKEN_EXPIRE_DAYS
-DEFAULT_PLANS   # CSV of plan names to seed on startup, e.g. "Free, Pro"
-SENTRY_DSN      # Optional, for error monitoring
-```
-
-## Route Registration
-
-All routes are versioned under `/v1`. The `routes/__init__.py` aggregates sub-routers, which `main.py` mounts. When adding a new route file, register it in `routes/__init__.py`.
+The MVP surface consists of sessions, Projects and Workflow statuses, Tasks with Labels/Subtasks/Attachments, Today, and health. Deferred billing, plans, subscriptions, organizations, sharing, comments, and recurrence flows are not mounted. `attachment_cleanup_worker.py` is infrastructure that retries durable private-storage cleanup outside member requests.
