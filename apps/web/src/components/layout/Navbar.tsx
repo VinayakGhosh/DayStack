@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { Layers3, Menu, X, LogOut, Settings, LayoutDashboard } from 'lucide-react';
+import { Layers3, Menu, X, LogOut, Settings } from 'lucide-react';
 import { useState } from 'react';
 import {
   DropdownMenu,
@@ -41,14 +41,9 @@ const Navbar = () => {
           <div className="hidden md:flex items-center gap-6">
             {isLoggedIn ? (
               <>
-                <Link to="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Dashboard
-                </Link>
+                <Link to="/today" className="text-muted-foreground hover:text-foreground transition-colors">Today</Link>
                 <Link to="/projects" className="text-muted-foreground hover:text-foreground transition-colors">
                   Projects
-                </Link>
-                <Link to="/subscription" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Subscription
                 </Link>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -71,10 +66,7 @@ const Navbar = () => {
                     </div>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <Link to="/dashboard" className="cursor-pointer">
-                        <LayoutDashboard className="mr-2 h-4 w-4" />
-                        Dashboard
-                      </Link>
+                      <Link to="/today" className="cursor-pointer">Today</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link to="/settings" className="cursor-pointer">
@@ -118,11 +110,11 @@ const Navbar = () => {
               {isLoggedIn ? (
                 <>
                   <Link
-                    to="/dashboard"
+                    to="/today"
                     className="text-foreground hover:text-primary transition-colors"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    Dashboard
+                    Today
                   </Link>
                   <Link
                     to="/projects"
@@ -130,13 +122,6 @@ const Navbar = () => {
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Projects
-                  </Link>
-                  <Link
-                    to="/subscription"
-                    className="text-foreground hover:text-primary transition-colors"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Subscription
                   </Link>
                   <Link
                     to="/settings"

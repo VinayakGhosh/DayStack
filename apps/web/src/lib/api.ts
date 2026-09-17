@@ -223,20 +223,6 @@ export const attachmentApi = {
   ),
 };
 
-// Subscription endpoints
-export const subscriptionApi = {
-  getCurrent: () => apiRequest<Subscription>('/v1/subscription/current'),
-
-  getPlans: () => apiRequest<Plan[]>('/v1/plans/'),
-
-  getUsage: () => apiRequest<Usage>('/v1/stats/'),
-
-  upgrade: (planId: string) =>
-    apiRequest<Subscription>(`/v1/subscription/${planId}`, {
-      method: 'POST',
-    }),
-};
-
 // Types
 export interface Member {
   member_id: string;
@@ -355,37 +341,4 @@ export interface AttachmentUpload {
 
 export interface AttachmentDownload {
   download_url: string;
-}
-
-export interface Subscription {
-  id: string;
-  plan_id: string;
-  plan_name: string;
-  status: 'active' | 'cancelled' | 'expired' | 'Active' | 'Cancelled' | 'Expired';
-  current_period_start: string;
-  current_period_end: string;
-  features: string[];
-  max_projects: number;
-  task_per_day: number;
-  export_allowed: boolean;
-}
-
-export interface Plan {
-  plan_id: string;
-  plan_tier: string;
-  price: number;
-  duration_days: number;
-  max_projects: number;
-  task_per_day: number;
-  export_allowed: boolean;
-}
-
-export interface Usage {
-  projects_count: number;
-  tasks_count: number;
-  tasks_completed_count: number;
-  tasks_in_progress_count: number;
-  tasks_pending_count: number;
-  task_limit: number;
-  project_limit: number;
 }
