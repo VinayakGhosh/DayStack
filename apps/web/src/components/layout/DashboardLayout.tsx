@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   Layers3,
   LayoutDashboard,
+  ListChecks,
   FolderKanban,
   CreditCard,
   Settings,
@@ -21,6 +22,7 @@ interface DashboardLayoutProps {
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/today', label: 'Today', icon: ListChecks },
   { href: '/projects', label: 'Projects', icon: FolderKanban },
   { href: '/subscription', label: 'Subscription', icon: CreditCard },
   { href: '/settings', label: 'Settings', icon: Settings },
