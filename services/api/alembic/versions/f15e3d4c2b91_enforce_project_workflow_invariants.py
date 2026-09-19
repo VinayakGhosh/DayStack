@@ -19,7 +19,7 @@ def upgrade() -> None:
     # status for legacy Projects whose statuses predate the completion flag.
     op.execute("""
         WITH selected_completion AS (
-            SELECT DISTINCT ON (project_id) status_id
+            SELECT DISTINCT ON (project_id) project_id, status_id
             FROM project_statuses
             ORDER BY project_id, is_completion DESC, display_order DESC, created_at DESC
         )
