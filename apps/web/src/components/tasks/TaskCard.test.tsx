@@ -56,7 +56,7 @@ describe('TaskCard', () => {
 
     rerender(<TaskCard task={{ ...task, due_date: '2026-09-19', status_id: 'done' }} statuses={statuses} onOpen={vi.fn()} onDelete={vi.fn()} onToggleCompletion={vi.fn()} now={new Date(2026, 8, 20)} />);
     expect(screen.queryByText(/Overdue/)).not.toBeInTheDocument();
-    expect(screen.getByText('19 Sep')).toBeInTheDocument();
+    expect(screen.getByText(/19 Sep/)).toBeInTheDocument();
     expect(screen.getByRole('checkbox')).toBeChecked();
   });
 });

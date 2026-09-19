@@ -57,6 +57,6 @@ describe('AttachmentSection', () => {
       target: { files: [new File(['brief'], 'brief.pdf', { type: 'application/pdf' })] },
     });
 
-    await waitFor(() => expect(attachmentApi.finalize).toHaveBeenCalledWith('task-1', 'attachment-2'));
+    await waitFor(() => expect(attachmentApi.finalize).toHaveBeenCalledWith('task-1', 'attachment-2', expect.anything()));
   });
 });

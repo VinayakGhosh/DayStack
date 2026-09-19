@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 type AttachmentApi = {
   list: (taskId: string) => Promise<{ data?: Attachment[]; error?: string }>;
   initiate: (taskId: string, file: File, signal?: AbortSignal) => Promise<{ data?: Attachment; error?: string }>;
-  finalize: (taskId: string, attachmentId: string) => Promise<{ data?: Attachment; error?: string }>;
+  finalize: (taskId: string, attachmentId: string, signal?: AbortSignal) => Promise<{ data?: Attachment; error?: string }>;
   download: (taskId: string, attachmentId: string) => Promise<{ data?: Blob; error?: string }>;
   delete: (taskId: string, attachmentId: string) => Promise<{ error?: string }>;
 };
@@ -50,7 +50,7 @@ const AttachmentSection = forwardRef<AttachmentSectionHandle, AttachmentSectionP
   const [isLoading, setIsLoading] = useState(Boolean(taskId));
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Attachment | null>(null);
-  const [preview, setPreview] = useState<{ name: string; url: string; attachment?: Attachment } | null>(null);
+  const [preview, setPreview] = useState<{ name: string; url: string; attachment?: Attachment; queueId?: string } | null>(null);
   const [existingPreviewUrls, setExistingPreviewUrls] = useState<Record<string, string>>({});
   const controllers = useRef(new Map<string, AbortController>());
   const queueRef = useRef(queue);
@@ -105,7 +105,7 @@ const AttachmentSection = forwardRef<AttachmentSectionHandle, AttachmentSectionP
     try {
       const initiated = await api.initiate(targetTaskId, item.file, controller.signal);
       if (!initiated.data) throw new Error(initiated.error || 'Could not start upload.');
-      const finalized = await api.finalize(targetTaskId, initiated.data.attachment_id);
+      const finalized = await api.finalize(targetTaskId, initiated.data.attachment_id, controller.signal);
       if (!finalized.data) throw new Error(finalized.error || 'Could not finish upload.');
       setAttachments((current) => [...current.filter((attachment) => attachment.attachment_id !== finalized.data!.attachment_id), finalized.data!]);
       if (item.previewUrl) setExistingPreviewUrls((current) => ({ ...current, [finalized.data!.attachment_id]: item.previewUrl! }));
@@ -186,7 +186,7 @@ const AttachmentSection = forwardRef<AttachmentSectionHandle, AttachmentSectionP
         {!isLoading && attachments.length === 0 && queue.length === 0 && <p className="text-sm text-muted-foreground">No attachments yet.</p>}
         {queue.map((item) => (
           <div key={item.id} className="flex items-center gap-2 rounded border p-2 text-sm">
-            {item.previewUrl ? <button type="button" onClick={() => setPreview({ name: item.file.name, url: item.previewUrl! })}><img src={item.previewUrl} alt="" className="h-10 w-10 rounded object-cover" /></button> : <Paperclip className="h-4 w-4 text-muted-foreground" />}
+            {item.previewUrl ? <button type="button" aria-label={`Preview ${item.file.name}`} onClick={() => setPreview({ name: item.file.name, url: item.previewUrl!, queueId: item.id })}><img src={item.previewUrl} alt="" className="h-10 w-10 rounded object-cover" /></button> : <Paperclip className="h-4 w-4 text-muted-foreground" />}
             <div className="min-w-0 flex-1"><p className="truncate">{item.file.name}</p><p className={cn('text-xs text-muted-foreground', item.state === 'failed' && 'text-destructive')}>{item.error || item.state}</p></div>
             <span className="text-xs text-muted-foreground">{formatSize(item.file.size)}</span>
             {item.state === 'failed' && taskId && <Button type="button" variant="ghost" size="icon" aria-label={`Retry ${item.file.name}`} onClick={() => uploadOne(item.id, taskId)}><RotateCcw className="h-4 w-4" /></Button>}
@@ -195,7 +195,7 @@ const AttachmentSection = forwardRef<AttachmentSectionHandle, AttachmentSectionP
         ))}
         {attachments.map((attachment) => (
           <div key={attachment.attachment_id} className="flex items-center gap-2 rounded border p-2 text-sm">
-            {existingPreviewUrls[attachment.attachment_id] ? <button type="button" onClick={() => setPreview({ name: attachment.filename, url: existingPreviewUrls[attachment.attachment_id], attachment })}><img src={existingPreviewUrls[attachment.attachment_id]} alt="" className="h-10 w-10 rounded object-cover" /></button> : attachment.media_type.startsWith('image/') ? <ImageIcon className="h-4 w-4 text-muted-foreground" /> : <Paperclip className="h-4 w-4 text-muted-foreground" />}
+            {existingPreviewUrls[attachment.attachment_id] ? <button type="button" aria-label={`Preview ${attachment.filename}`} onClick={() => setPreview({ name: attachment.filename, url: existingPreviewUrls[attachment.attachment_id], attachment })}><img src={existingPreviewUrls[attachment.attachment_id]} alt="" className="h-10 w-10 rounded object-cover" /></button> : attachment.media_type.startsWith('image/') ? <ImageIcon className="h-4 w-4 text-muted-foreground" /> : <Paperclip className="h-4 w-4 text-muted-foreground" />}
             <div className="min-w-0 flex-1"><p className="truncate">{attachment.filename}</p><p className="text-xs text-muted-foreground">{attachment.media_type.split('/').pop()} · {formatSize(attachment.byte_size)}</p></div>
             {attachment.media_type.startsWith('image/') && attachment.state === 'available' && <Button type="button" variant="ghost" size="icon" aria-label={`Preview ${attachment.filename}`} onClick={() => openExistingImage(attachment)}><Eye className="h-4 w-4" /></Button>}
             {attachment.state === 'available' ? <Button type="button" variant="ghost" size="icon" aria-label={`Download ${attachment.filename}`} onClick={() => download(attachment)}><Download className="h-4 w-4" /></Button> : <span className="text-xs text-muted-foreground">Pending upload</span>}
@@ -205,7 +205,7 @@ const AttachmentSection = forwardRef<AttachmentSectionHandle, AttachmentSectionP
       </div>
 
       <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Attachment?</AlertDialogTitle><AlertDialogDescription>This permanently deletes {deleteTarget?.filename}. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={removeAvailable} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
-      <Dialog open={Boolean(preview)} onOpenChange={(open) => { if (!open && preview) { if (preview.attachment && existingPreviewUrls[preview.attachment.attachment_id] !== preview.url) URL.revokeObjectURL(preview.url); setPreview(null); } }}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>{preview?.name}</DialogTitle></DialogHeader>{preview && <img src={preview.url} alt={preview.name} className="max-h-[70vh] w-full object-contain" />}<DialogFooter>{preview?.attachment && <Button type="button" variant="outline" onClick={() => download(preview.attachment!)}><Download className="mr-2 h-4 w-4" />Download</Button>}</DialogFooter></DialogContent></Dialog>
+      <Dialog open={Boolean(preview)} onOpenChange={(open) => { if (!open && preview) { if (preview.attachment && existingPreviewUrls[preview.attachment.attachment_id] !== preview.url) URL.revokeObjectURL(preview.url); setPreview(null); } }}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>{preview?.name}</DialogTitle></DialogHeader>{preview && <img src={preview.url} alt={preview.name} className="max-h-[70vh] w-full object-contain" />}<DialogFooter>{preview?.queueId && <Button type="button" variant="destructive" onClick={() => { const item = queue.find((candidate) => candidate.id === preview.queueId); if (item) removeQueued(item); setPreview(null); }}><Trash2 className="mr-2 h-4 w-4" />Remove</Button>}{preview?.attachment && <><Button type="button" variant="outline" onClick={() => download(preview.attachment!)}><Download className="mr-2 h-4 w-4" />Download</Button><Button type="button" variant="destructive" onClick={() => { setDeleteTarget(preview.attachment!); setPreview(null); }}><Trash2 className="mr-2 h-4 w-4" />Delete</Button></>}</DialogFooter></DialogContent></Dialog>
     </section>
   );
 });

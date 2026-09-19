@@ -219,8 +219,8 @@ export const attachmentApi = {
     form.append('file', file);
     return apiRequest<Attachment>(`/v1/tasks/${taskId}/attachments`, { method: 'POST', body: form, signal });
   },
-  finalize: (taskId: string, attachmentId: string) => apiRequest<Attachment>(
-    `/v1/tasks/${taskId}/attachments/${attachmentId}/finalize`, { method: 'POST' }
+  finalize: (taskId: string, attachmentId: string, signal?: AbortSignal) => apiRequest<Attachment>(
+    `/v1/tasks/${taskId}/attachments/${attachmentId}/finalize`, { method: 'POST', signal }
   ),
   download: async (taskId: string, attachmentId: string): Promise<ApiResponse<Blob>> => {
     const token = csrfToken();

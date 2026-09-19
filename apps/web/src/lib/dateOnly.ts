@@ -10,8 +10,7 @@ export const formatTaskDueDate = (
 ): { text: string; overdue: boolean } => {
   const due = parseDateOnly(value);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][due.getMonth()];
-  const compact = `${due.getDate()} ${month}`;
+  const compact = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(due);
   if (due.getTime() === today.getTime()) return { text: 'Today', overdue: false };
   if (!completed && due < today) return { text: `Overdue · ${compact}`, overdue: true };
   return { text: compact, overdue: false };

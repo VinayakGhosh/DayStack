@@ -30,6 +30,29 @@ const help = {
   subtasks: 'Break this task into smaller checklist steps. Subtasks stay inside this task and can be completed individually.',
 };
 
+type TaskFormSnapshot = {
+  name: string;
+  description: string;
+  dueDate: string;
+  priority: Priority;
+  labelIds: string[];
+  stagedLabelNames: string[];
+  subtasks: { text: string; is_completed: boolean }[];
+  subtaskDraft?: string;
+  queueCount: number;
+};
+
+const normalizedSnapshot = (form: TaskFormSnapshot) => JSON.stringify({
+  name: form.name.trim(),
+  description: form.description.trim(),
+  dueDate: form.dueDate,
+  priority: form.priority,
+  labelIds: [...form.labelIds].sort(),
+  stagedLabelNames: form.stagedLabelNames.map((item) => item.trim()).sort(),
+  subtasks: [...form.subtasks, ...(form.subtaskDraft?.trim() ? [{ text: form.subtaskDraft.trim(), is_completed: false }] : [])],
+  queueCount: form.queueCount,
+});
+
 const TaskModal = ({ open, onClose, onSubmit, onLabelsChange, onAttachmentsChange, task, labels, isLoading }: TaskModalProps) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -45,15 +68,13 @@ const TaskModal = ({ open, onClose, onSubmit, onLabelsChange, onAttachmentsChang
   const [persistedTaskId, setPersistedTaskId] = useState<string | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [cancelUploadsOpen, setCancelUploadsOpen] = useState(false);
+  const [labelHelpOpen, setLabelHelpOpen] = useState(false);
+  const [subtaskHelpOpen, setSubtaskHelpOpen] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; save?: string; label?: string }>({});
   const initialSnapshot = useRef('');
   const attachmentRef = useRef<AttachmentSectionHandle>(null);
 
-  const snapshot = useMemo(() => JSON.stringify({
-    name: name.trim(), description: description.trim(), dueDate, priority,
-    labelIds: [...labelIds].sort(), stagedLabelNames: stagedLabelNames.map((item) => item.trim()).sort(),
-    subtasks: [...subtasks, ...(subtaskDraft.trim() ? [{ text: subtaskDraft.trim(), is_completed: false }] : [])], queueCount,
-  }), [description, dueDate, labelIds, name, priority, queueCount, stagedLabelNames, subtaskDraft, subtasks]);
+  const snapshot = useMemo(() => normalizedSnapshot({ name, description, dueDate, priority, labelIds, stagedLabelNames, subtasks, subtaskDraft, queueCount }), [description, dueDate, labelIds, name, priority, queueCount, stagedLabelNames, subtaskDraft, subtasks]);
   const dirty = open && initialSnapshot.current !== snapshot;
 
   useEffect(() => {
@@ -66,11 +87,8 @@ const TaskModal = ({ open, onClose, onSubmit, onLabelsChange, onAttachmentsChang
     setLabelIds(values.labelIds); setSubtasks(values.subtasks); setStagedLabelNames([]); setLabelQuery(''); setSubtaskDraft('');
     setQueueCount(0); setErrors({}); setUploadsActive(false);
     setPersistedTaskId(null);
-    initialSnapshot.current = JSON.stringify({
-      name: values.name.trim(), description: values.description.trim(), dueDate: values.dueDate,
-      priority: values.priority, labelIds: [...values.labelIds].sort(), stagedLabelNames: [],
-      subtasks: values.subtasks, queueCount: 0,
-    });
+    setLabelHelpOpen(false); setSubtaskHelpOpen(false);
+    initialSnapshot.current = normalizedSnapshot({ ...values, stagedLabelNames: [], queueCount: 0 });
   }, [open, task]);
 
   const requestClose = () => {
@@ -139,14 +157,14 @@ const TaskModal = ({ open, onClose, onSubmit, onLabelsChange, onAttachmentsChang
                 <div className="space-y-2"><Label htmlFor="task-priority">Priority</Label><select id="task-priority" className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={priority} onChange={(event) => setPriority(event.target.value as Priority)}><option value="none">None</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
               </div>
               <div className="space-y-2">
-                <div className="flex items-center gap-1"><Label htmlFor="label-search">Labels</Label><Popover><PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="h-6 w-6" aria-label="About Labels"><Info className="h-3.5 w-3.5" /></Button></PopoverTrigger><PopoverContent className="text-sm">{help.labels}</PopoverContent></Popover></div>
+                <div className="flex items-center gap-1"><Label htmlFor="label-search">Labels</Label><Popover open={labelHelpOpen} onOpenChange={setLabelHelpOpen}><PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="h-6 w-6" aria-label="About Labels" onFocus={() => setLabelHelpOpen(true)}><Info className="h-3.5 w-3.5" /></Button></PopoverTrigger><PopoverContent className="text-sm">{help.labels}</PopoverContent></Popover></div>
                 <div className="flex flex-wrap gap-1.5">{labels.filter((label) => labelIds.includes(label.label_id)).map((label) => <Badge key={label.label_id} variant="secondary">{label.name}<button type="button" className="ml-1" aria-label={`Remove ${label.name}`} onClick={() => setLabelIds((current) => current.filter((id) => id !== label.label_id))}><X className="h-3 w-3" /></button></Badge>)}{stagedLabelNames.map((label) => <Badge key={label} variant="outline">{label}<button type="button" className="ml-1" aria-label={`Remove ${label}`} onClick={() => setStagedLabelNames((current) => current.filter((name) => name !== label))}><X className="h-3 w-3" /></button></Badge>)}</div>
                 <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input id="label-search" value={labelQuery} onChange={(event) => setLabelQuery(event.target.value)} className="pl-9" placeholder="Search or create a Label" /></div>
                 {labelQuery && <div className="max-h-40 overflow-y-auto rounded-md border p-1">{matchingLabels.map((label) => <button key={label.label_id} type="button" className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-muted" onClick={() => setLabelIds((current) => current.includes(label.label_id) ? current.filter((id) => id !== label.label_id) : [...current, label.label_id])}>{label.name}{labelIds.includes(label.label_id) && <Check className="h-4 w-4" />}</button>)}{!exactMatch && <button type="button" className="flex w-full items-center rounded px-2 py-1.5 text-left text-sm text-primary hover:bg-muted" onClick={stageLabel}><Plus className="mr-2 h-4 w-4" />Create “{labelQuery.trim()}”</button>}</div>}
                 {errors.label && <p role="alert" className="text-sm text-destructive">{errors.label}</p>}
               </div>
               <div className="space-y-2">
-                <div className="flex items-center gap-1"><Label htmlFor="subtask-draft">Subtasks</Label><Popover><PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="h-6 w-6" aria-label="About Subtasks"><Info className="h-3.5 w-3.5" /></Button></PopoverTrigger><PopoverContent className="text-sm">{help.subtasks}</PopoverContent></Popover></div>
+                <div className="flex items-center gap-1"><Label htmlFor="subtask-draft">Subtasks</Label><Popover open={subtaskHelpOpen} onOpenChange={setSubtaskHelpOpen}><PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="h-6 w-6" aria-label="About Subtasks" onFocus={() => setSubtaskHelpOpen(true)}><Info className="h-3.5 w-3.5" /></Button></PopoverTrigger><PopoverContent className="text-sm">{help.subtasks}</PopoverContent></Popover></div>
                 {subtasks.map((subtask, index) => <div key={`${subtask.text}-${index}`} className="flex items-center gap-2"><input aria-label={`Complete ${subtask.text}`} type="checkbox" checked={subtask.is_completed} onChange={() => setSubtasks((current) => current.map((item, position) => position === index ? { ...item, is_completed: !item.is_completed } : item))} /><span className="flex-1 text-sm">{subtask.text}</span><Button type="button" variant="ghost" size="sm" onClick={() => setSubtasks((current) => current.filter((_, position) => position !== index))}>Remove</Button></div>)}
                 <div className="flex gap-2"><Input id="subtask-draft" value={subtaskDraft} onChange={(event) => setSubtaskDraft(event.target.value)} placeholder="Add a Subtask" onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitDraft(); } }} /><Button type="button" variant="outline" onClick={commitDraft}>Add</Button></div>
               </div>

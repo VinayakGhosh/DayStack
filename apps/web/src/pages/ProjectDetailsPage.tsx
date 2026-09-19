@@ -7,6 +7,7 @@ import {
   DragOverlay,
   DragStartEvent,
   PointerSensor,
+  KeyboardSensor,
   useSensor,
   useSensors,
   closestCorners,
@@ -16,6 +17,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
   useSortable,
+  sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -71,14 +73,14 @@ const SortableTaskCard = ({
   statuses,
   onEdit,
   onDelete,
-  onStatusChange,
+  onToggleCompletion,
   highlighted,
 }: {
   task: Task;
   statuses: ProjectStatus[];
   onEdit: (t: Task) => void;
   onDelete: (t: Task) => void;
-  onStatusChange: (t: Task, statusId: string) => void;
+  onToggleCompletion: (t: Task, completed: boolean) => void;
   highlighted?: boolean;
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -99,7 +101,7 @@ const SortableTaskCard = ({
         statuses={statuses}
         onOpen={onEdit}
         onDelete={onDelete}
-        onToggleCompletion={(selected, completed) => onStatusChange(selected, completed ? '__complete__' : '__reopen__')}
+        onToggleCompletion={onToggleCompletion}
         dragHandleProps={{ ...attributes, ...listeners }}
         highlighted={highlighted}
       />
@@ -167,7 +169,8 @@ const ProjectDetailsPage = () => {
   const dragOriginStatusId = useRef<string | null>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   const fetchData = useCallback(async () => {
@@ -275,12 +278,6 @@ const ProjectDetailsPage = () => {
   };
 
   const handleStatusChange = async (task: Task, statusId: string) => {
-    if (statusId === '__complete__' || statusId === '__reopen__') {
-      const { data, error } = await tasksApi.setCompleted(task.task_id, statusId === '__complete__');
-      if (data) setTasks((current) => current.map((item) => item.task_id === task.task_id ? data : item));
-      else toast({ title: 'Failed to update completion', description: error, variant: 'destructive' });
-      return;
-    }
     // Optimistic update
     setTasks((prev) =>
       prev.map((t) => {
@@ -305,6 +302,12 @@ const ProjectDetailsPage = () => {
         )
       );
     }
+  };
+
+  const handleToggleCompletion = async (task: Task, completed: boolean) => {
+    const { data, error } = await tasksApi.setCompleted(task.task_id, completed);
+    if (data) setTasks((current) => current.map((item) => item.task_id === task.task_id ? data : item));
+    else toast({ title: 'Failed to update completion', description: error, variant: 'destructive' });
   };
 
   // ── Drag and Drop ──────────────────────────────────────────────────────────
@@ -637,7 +640,7 @@ const ProjectDetailsPage = () => {
                                 statuses={statuses}
                                 onEdit={openTaskDetails}
                                 onDelete={(t) => setDeletingTask(t)}
-                                onStatusChange={handleStatusChange}
+                                onToggleCompletion={handleToggleCompletion}
                                 highlighted={newTaskId === task.task_id}
                               />
                             ))
@@ -790,7 +793,7 @@ const ProjectDetailsPage = () => {
                           }}
                           autoFocus
                         />
-                        <Button
+                        <Tooltip><TooltipTrigger asChild><Button
                           size="icon"
                           variant="ghost"
                           className="h-7 w-7 text-green-600"
@@ -799,8 +802,8 @@ const ProjectDetailsPage = () => {
                           aria-label={`Save ${status.name}`}
                         >
                           <Check className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
+                        </Button></TooltipTrigger><TooltipContent>Save status name</TooltipContent></Tooltip>
+                        <Tooltip><TooltipTrigger asChild><Button
                           size="icon"
                           variant="ghost"
                           className="h-7 w-7"
@@ -808,7 +811,7 @@ const ProjectDetailsPage = () => {
                           aria-label={`Cancel editing ${status.name}`}
                         >
                           <X className="h-3.5 w-3.5" />
-                        </Button>
+                        </Button></TooltipTrigger><TooltipContent>Cancel editing</TooltipContent></Tooltip>
                       </>
                     ) : (
                       <>
