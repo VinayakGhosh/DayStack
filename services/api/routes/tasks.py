@@ -1,16 +1,13 @@
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from db.db import get_db
 from lib.auth import get_current_user
 from schema.task import (
-    AttachmentDownloadResponse,
-    AttachmentInitiate,
     AttachmentResponse,
-    AttachmentUploadResponse,
     LabelInput,
     LabelResponse,
     PatchLabel,
@@ -24,7 +21,6 @@ from schema.task import (
     ToggleSubtask,
 )
 from task_workspace.service import TaskWorkspace
-from task_workspace.storage import get_attachment_storage
 from task_workspace.sqlalchemy_repository import (
     SqlAlchemyTaskWorkspaceRepository,
     WorkspaceForbidden,
@@ -35,8 +31,8 @@ from task_workspace.sqlalchemy_repository import (
 router = APIRouter()
 
 
-def _workspace(db: Session, storage=None) -> TaskWorkspace:
-    return TaskWorkspace(SqlAlchemyTaskWorkspaceRepository(db), storage)
+def _workspace(db: Session) -> TaskWorkspace:
+    return TaskWorkspace(SqlAlchemyTaskWorkspaceRepository(db))
 
 
 def _raise_workspace_error(error: Exception) -> None:
@@ -92,10 +88,9 @@ def delete_task(
     task_id: UUID,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
-    storage=Depends(get_attachment_storage),
 ):
     try:
-        _workspace(db, storage).delete_task(current_user.user_id, task_id)
+        _workspace(db).delete_task(current_user.user_id, task_id)
     except WorkspaceProblem as error:
         _raise_workspace_error(error)
 
@@ -173,21 +168,20 @@ def toggle_subtask(task_id: UUID, subtask_id: UUID, payload: ToggleSubtask, db: 
         _raise_workspace_error(error)
 
 
-@router.post("/{task_id}/attachments", response_model=AttachmentUploadResponse)
-def initiate_attachment_upload(
+@router.post("/{task_id}/attachments", response_model=AttachmentResponse)
+async def initiate_attachment_upload(
     task_id: UUID,
-    payload: AttachmentInitiate,
+    file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
-    storage=Depends(get_attachment_storage),
 ):
     try:
-        return _workspace(db, storage).initiate_attachment_upload(
+        return _workspace(db).initiate_attachment_upload(
             current_user.user_id,
             task_id,
-            payload.filename,
-            payload.media_type,
-            payload.byte_size,
+            file.filename or "",
+            file.content_type or "",
+            await file.read(),
         )
     except WorkspaceProblem as error:
         _raise_workspace_error(error)
@@ -211,27 +205,30 @@ def finalize_attachment_upload(
     attachment_id: UUID,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
-    storage=Depends(get_attachment_storage),
 ):
     try:
-        return _workspace(db, storage).finalize_attachment_upload(
+        return _workspace(db).finalize_attachment_upload(
             current_user.user_id, task_id, attachment_id
         )
     except WorkspaceProblem as error:
         _raise_workspace_error(error)
 
 
-@router.get("/{task_id}/attachments/{attachment_id}/download", response_model=AttachmentDownloadResponse)
+@router.get("/{task_id}/attachments/{attachment_id}/download")
 def download_attachment(
     task_id: UUID,
     attachment_id: UUID,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
-    storage=Depends(get_attachment_storage),
 ):
     try:
-        return _workspace(db, storage).authorize_attachment_download(
+        attachment, content = _workspace(db).authorize_attachment_download(
             current_user.user_id, task_id, attachment_id
+        )
+        return Response(
+            content=content,
+            media_type=attachment.media_type,
+            headers={"Content-Disposition": f'attachment; filename="{attachment.filename}"'},
         )
     except WorkspaceProblem as error:
         _raise_workspace_error(error)
@@ -243,9 +240,8 @@ def delete_attachment(
     attachment_id: UUID,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
-    storage=Depends(get_attachment_storage),
 ):
     try:
-        _workspace(db, storage).delete_attachment(current_user.user_id, task_id, attachment_id)
+        _workspace(db).delete_attachment(current_user.user_id, task_id, attachment_id)
     except WorkspaceProblem as error:
         _raise_workspace_error(error)

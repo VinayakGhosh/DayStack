@@ -1,12 +1,9 @@
 from fastapi import FastAPI
-import asyncio
 import logging
 from routes import api_router
-from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
-from attachment_cleanup_worker import run_attachment_cleanup_worker
 
 load_dotenv()
 
@@ -22,21 +19,10 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    stop_event = asyncio.Event()
-    cleanup_worker = asyncio.create_task(run_attachment_cleanup_worker(stop_event))
-    try:
-        yield
-    finally:
-        stop_event.set()
-        await cleanup_worker
-
 app = FastAPI(
     title="DayStack API",
     description="API for the DayStack MVP",
     version="1.0.0",
-    lifespan=lifespan,
 )
 
 app.add_middleware(

@@ -1,16 +1,16 @@
 import { ChangeEvent, useCallback, useEffect, useState } from 'react';
 import { Download, Paperclip, Trash2, Upload } from 'lucide-react';
 
-import { attachmentApi, Attachment, AttachmentUpload } from '@/lib/api';
+import { attachmentApi, Attachment } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 type AttachmentApi = {
   list: (taskId: string) => Promise<{ data?: Attachment[]; error?: string }>;
-  initiate: (taskId: string, file: File) => Promise<{ data?: AttachmentUpload; error?: string }>;
+  initiate: (taskId: string, file: File) => Promise<{ data?: Attachment; error?: string }>;
   finalize: (taskId: string, attachmentId: string) => Promise<{ data?: Attachment; error?: string }>;
-  download: (taskId: string, attachmentId: string) => Promise<{ data?: { download_url: string }; error?: string }>;
+  download: (taskId: string, attachmentId: string) => Promise<{ data?: Blob; error?: string }>;
   delete: (taskId: string, attachmentId: string) => Promise<{ error?: string }>;
 };
 
@@ -48,21 +48,8 @@ const AttachmentSection = ({ taskId, api = attachmentApi }: AttachmentSectionPro
     try {
       const initiated = await api.initiate(taskId, file);
       if (!initiated.data) throw new Error(initiated.error || 'Could not start upload.');
-      setAttachments((items) => [...items, initiated.data!.attachment]);
-      const uploaded = initiated.data.upload_method === 'POST'
-        ? await (() => {
-          const form = new FormData();
-          Object.entries(initiated.data!.upload_fields || {}).forEach(([key, value]) => form.append(key, value));
-          form.append('file', file);
-          return fetch(initiated.data!.upload_url, { method: 'POST', body: form });
-        })()
-        : await fetch(initiated.data.upload_url, {
-          method: 'PUT',
-          headers: { 'Content-Type': file.type },
-          body: file,
-        });
-      if (!uploaded.ok) throw new Error('Direct upload failed.');
-      const finalized = await api.finalize(taskId, initiated.data.attachment.attachment_id);
+      setAttachments((items) => [...items, initiated.data]);
+      const finalized = await api.finalize(taskId, initiated.data.attachment_id);
       if (!finalized.data) throw new Error(finalized.error || 'Could not finish upload.');
       setAttachments((items) => items.map((item) => (
         item.attachment_id === finalized.data!.attachment_id ? finalized.data! : item
@@ -81,7 +68,12 @@ const AttachmentSection = ({ taskId, api = attachmentApi }: AttachmentSectionPro
       setError(response.error || 'Download failed. Please try again.');
       return;
     }
-    window.open(response.data.download_url, '_blank', 'noopener,noreferrer');
+    const url = URL.createObjectURL(response.data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = attachment.filename;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const remove = async (attachment: Attachment) => {

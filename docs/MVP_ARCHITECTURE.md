@@ -6,7 +6,7 @@ DayStack's MVP is a free, responsive web application for one member to execute p
 
 DayStack is the canonical product name. `Task Factory` is legacy branding and must not appear in member-facing copy, HTML metadata, or new deployment configuration.
 
-The existing React/TypeScript frontend, FastAPI backend, and PostgreSQL database remain the delivery stack. Attachments live in private S3-compatible object storage. Billing and subscriptions are removed from the member experience and do not influence MVP quotas.
+The existing React/TypeScript frontend, FastAPI backend, and PostgreSQL database remain the delivery stack. During development, Attachment blobs live in PostgreSQL; a later production migration will move them to private object storage. Billing and subscriptions are removed from the member experience and do not influence MVP quotas.
 
 ## Product rules
 
@@ -26,7 +26,7 @@ The existing React/TypeScript frontend, FastAPI backend, and PostgreSQL database
 React + TypeScript browser application
   ├─ session-aware REST client
   ├─ Today, Projects, Project Board, Task Detail, Settings
-  └─ signed attachment upload/download requests
+  └─ multipart attachment upload/download requests
                          │ HTTPS /v1
                          ▼
 FastAPI transport layer
@@ -34,9 +34,8 @@ FastAPI transport layer
   └─ Task Workspace module
        ├─ ownership, quotas, workflow invariants, Today rules
        ├─ Project/Task/Status/Label/Subtask operations
-       └─ attachment authorization and cleanup coordination
-             ├─ PostgreSQL adapters
-             └─ S3-compatible storage adapter
+       └─ attachment authorization and blob coordination
+             └─ PostgreSQL repository
 ```
 
 ## The Task Workspace module
@@ -54,7 +53,7 @@ The Task Workspace module is the MVP's primary seam. Its interface expresses mem
 
 FastAPI route handlers are thin adapters: authenticate the member, validate a request DTO, call this module, and map its result to a response DTO. They do not query or mutate ORM models directly. The module owns all rules so the web UI cannot bypass them and tests can exercise behavior without HTTP.
 
-PostgreSQL repositories and object storage are internal adapters. They must be passed into the module rather than constructed by callers. This gives tests a small interface with high leverage while allowing SQL and storage behavior to be verified separately.
+The PostgreSQL repository is the Task Workspace persistence adapter. It keeps Attachment metadata and its private one-to-one Attachment blob together while allowing the storage implementation to change during the later production migration.
 
 ## Data model
 
@@ -69,7 +68,8 @@ The existing User, Project, Task, and ProjectStatus concepts evolve into the fol
 | Today selection | Member, local calendar date, Task, and unique position. A selection must reference an active Task owned by that Member; at most three positions exist per date. |
 | Label | Member owner, name, optional color, and an explicit many-to-many Task association. |
 | Subtask | Parent Task, text, display order, and completion flag. It is not a Task and has no independent dates, labels, attachments, or status. |
-| Attachment | Task, original filename, media type, byte size, private storage key, upload state, and timestamps. Application metadata never stores the file bytes. |
+| Attachment | Task, download filename, media type, byte size, upload state, and timestamps. |
+| Attachment blob | One-to-one private binary content for an Attachment. During development it is stored in PostgreSQL and is never returned by ordinary metadata endpoints. |
 | Session | Hashed refresh-token identifier, member, expiry, rotation/revocation state. Access tokens remain short-lived and are not stored in browser JavaScript. |
 
 The module must calculate a Task's completion from its current Workflow status's `is_completion` value. It must use transactions/locking around quota-changing actions so concurrent requests cannot exceed limits.
@@ -85,18 +85,18 @@ All member-facing endpoints stay under `/v1`. Collection reads return an empty l
 - Today: get one member-local date, add/remove/reorder selected Tasks.
 - Labels: list/create/update/delete member Labels; set a Task's Labels.
 - Subtasks: set a Task's ordered Subtasks and toggle their completion.
-- Attachments: begin upload, finalize upload, list, download, and delete. Uploads use a short-lived signed URL issued only after Task ownership and file policy validation.
+- Attachments: upload multipart file content, finalize upload, list, download, and delete. The API checks Task ownership and file policy before it persists content.
 
 All resource lookups verify ownership at the module seam. Responses use ordinary problem DTOs with stable machine-readable error codes. The frontend reads the API base URL from environment configuration rather than a hard-coded localhost address.
 
 ## Attachment lifecycle
 
-1. The frontend requests an upload for a Task with filename, media type, and size.
-2. Task Workspace verifies ownership, accepts only common document/image types, and enforces a 10 MB maximum.
-3. It creates a pending Attachment record and returns a short-lived signed upload URL.
-4. The browser uploads directly to private object storage, then finalizes the Attachment with the backend.
-5. Downloads receive a short-lived signed URL after re-checking ownership.
-6. Deleting an Attachment, Task, or Project deletes metadata and schedules/executes blob cleanup. Failed cleanup is retried; no caller handles storage keys.
+1. The frontend sends a multipart file for a Task to the API.
+2. Task Workspace verifies ownership, accepts common documents plus static JPEG, PNG, GIF, and WebP images, and enforces a 10 MB input maximum for documents.
+3. Static images are normalized to WebP with an 800 KB target and a 1 MB hard limit; animated images are rejected.
+4. The API creates a pending Attachment and its private PostgreSQL Attachment blob, then finalizes the Attachment.
+5. Downloads stream the private blob after re-checking ownership.
+6. Deleting an Attachment, Task, or Project permanently removes the metadata and blob through database deletion and foreign keys.
 
 ## Frontend responsibilities
 
@@ -122,7 +122,7 @@ The Task Workspace interface is the primary test seam. Tests assert observable r
 - Unit tests use in-memory/fake repository and storage adapters only where that makes a rule easier to isolate.
 - Backend integration tests exercise authenticated HTTP contracts against PostgreSQL-compatible migrations, including cookie refresh/rotation and error DTOs.
 - Frontend tests exercise user outcomes: login state, empty collections, quota messages, project-board status changes, Today ordering, and attachment states.
-- Storage integration tests verify signed URL authorization and cleanup coordination without requiring the UI to know storage internals.
+- Attachment integration tests verify PostgreSQL blob authorization and database-backed permanent deletion without requiring the UI to know persistence internals.
 
 ## Explicitly out of scope
 

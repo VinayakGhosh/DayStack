@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from models.Project import ProjectStatus, Projects
 from models.Task import (
-    AttachmentCleanupJobs,
+    AttachmentBlobs,
     Attachments,
     Labels,
     Subtasks,
@@ -82,13 +82,6 @@ class WorkspaceAttachmentTooLarge(WorkspaceConflict):
     """The requested Attachment exceeds the 10 MB limit."""
 
     code = "attachment_too_large"
-
-
-class WorkspaceAttachmentStorageUnavailable(WorkspaceConflict):
-    """Private object storage could not complete a member-visible operation."""
-
-    status_code = 503
-    code = "attachment_storage_unavailable"
 
 
 class SqlAlchemyTaskWorkspaceRepository:
@@ -541,18 +534,18 @@ class SqlAlchemyTaskWorkspaceRepository:
         self._db.commit()
         return self.get_today(member_id, local_date)
 
-    def create_attachment(self, member_id, task_id, attachment_id, filename, media_type, byte_size, storage_key):
+    def create_attachment(self, member_id, task_id, attachment_id, filename, media_type, byte_size, content):
         self._attachment_task(member_id, task_id)
         attachment = Attachments(
             attachment_id=attachment_id,
             task_id=task_id,
-            original_filename=filename,
+            filename=filename,
             media_type=media_type,
             byte_size=byte_size,
-            storage_key=storage_key,
             upload_state="pending",
         )
         self._db.add(attachment)
+        self._db.add(AttachmentBlobs(attachment_id=attachment_id, content=content))
         self._db.commit()
         self._db.refresh(attachment)
         return self._attachment_response(attachment)
@@ -579,53 +572,20 @@ class SqlAlchemyTaskWorkspaceRepository:
             raise WorkspaceConflict("This Attachment is still being uploaded.", code="attachment_pending")
         return attachment
 
+    def attachment_blob_for_download(self, member_id, task_id, attachment_id):
+        attachment = self.attachment_for_download(member_id, task_id, attachment_id)
+        blob = self._db.get(AttachmentBlobs, attachment.attachment_id)
+        if blob is None:
+            raise WorkspaceNotFound("Attachment content not found")
+        return attachment, blob.content
+
     def delete_attachment(self, member_id, task_id, attachment_id):
         attachment = self._attachment(member_id, task_id, attachment_id)
-        storage_key = attachment.storage_key
+        blob = self._db.get(AttachmentBlobs, attachment.attachment_id)
+        if blob is not None:
+            self._db.delete(blob)
         self._db.delete(attachment)
         self._db.commit()
-        return storage_key
-
-    def attachment_keys_for_task(self, member_id, task_id):
-        self._attachment_task(member_id, task_id)
-        return [key for (key,) in self._db.query(Attachments.storage_key).filter(
-            Attachments.task_id == task_id
-        ).all()]
-
-    def attachment_keys_for_project(self, member_id, project_id):
-        self._personal_project(member_id, project_id)
-        return [key for (key,) in self._db.query(Attachments.storage_key).join(
-            Tasks, Attachments.task_id == Tasks.task_id
-        ).filter(Tasks.project_id == project_id).all()]
-
-    def queue_attachment_cleanup(self, storage_key):
-        existing = self._db.query(AttachmentCleanupJobs).filter(
-            AttachmentCleanupJobs.storage_key == storage_key
-        ).first()
-        if existing is None:
-            self._db.add(AttachmentCleanupJobs(storage_key=storage_key))
-            self._db.commit()
-
-    def pending_attachment_cleanup(self):
-        return self._db.query(AttachmentCleanupJobs).order_by(
-            AttachmentCleanupJobs.created_at, AttachmentCleanupJobs.cleanup_id
-        ).all()
-
-    def complete_attachment_cleanup(self, cleanup_id):
-        cleanup = self._db.query(AttachmentCleanupJobs).filter(
-            AttachmentCleanupJobs.cleanup_id == cleanup_id
-        ).first()
-        if cleanup is not None:
-            self._db.delete(cleanup)
-            self._db.commit()
-
-    def failed_attachment_cleanup(self, cleanup_id):
-        cleanup = self._db.query(AttachmentCleanupJobs).filter(
-            AttachmentCleanupJobs.cleanup_id == cleanup_id
-        ).first()
-        if cleanup is not None:
-            cleanup.attempts += 1
-            self._db.commit()
 
     def _personal_project(self, member_id, project_id):
         project = self._db.query(Projects).filter(
@@ -879,7 +839,7 @@ class SqlAlchemyTaskWorkspaceRepository:
     def _attachment_response(self, attachment):
         return {
             "attachment_id": attachment.attachment_id,
-            "filename": attachment.original_filename,
+            "filename": attachment.filename,
             "media_type": attachment.media_type,
             "byte_size": attachment.byte_size,
             "state": attachment.upload_state,

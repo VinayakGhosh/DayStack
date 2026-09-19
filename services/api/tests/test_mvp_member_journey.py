@@ -2,8 +2,6 @@
 
 import os
 import unittest
-from datetime import datetime, timezone
-from uuid import UUID
 
 os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("ALGORITHM", "HS256")
@@ -25,7 +23,7 @@ from db.db import get_db
 from models.organization import Organization
 from models.Project import ProjectStatus, Projects
 from models.Task import (
-    AttachmentCleanupJobs,
+    AttachmentBlobs,
     Attachments,
     Labels,
     Subtasks,
@@ -36,34 +34,6 @@ from models.Task import (
 )
 from models.user import MemberSessions, Users
 from routes import api_router
-from task_workspace.storage import (
-    AttachmentObjectMetadata,
-    AttachmentUploadTicket,
-    get_attachment_storage,
-)
-
-
-class FakePrivateStorage:
-    def __init__(self) -> None:
-        self.objects: dict[str, AttachmentObjectMetadata] = {}
-
-    def create_upload(self, attachment_id: UUID, media_type: str, byte_size: int) -> AttachmentUploadTicket:
-        object_key = f"private/{attachment_id}"
-        self.objects[object_key] = AttachmentObjectMetadata(media_type=media_type, byte_size=byte_size)
-        return AttachmentUploadTicket(
-            object_key=object_key,
-            upload_url=f"https://storage.example.test/{attachment_id}",
-            expires_at=datetime.now(timezone.utc),
-        )
-
-    def finalize_upload(self, object_key: str) -> AttachmentObjectMetadata:
-        return self.objects[object_key]
-
-    def create_download(self, object_key: str, filename: str, media_type: str) -> str:
-        return f"https://storage.example.test/download/{filename}"
-
-    def delete(self, object_key: str) -> None:
-        self.objects.pop(object_key, None)
 
 
 class MvpMemberJourneyTests(unittest.TestCase):
@@ -78,15 +48,13 @@ class MvpMemberJourneyTests(unittest.TestCase):
             Users.__table__, Organization.__table__,
             MemberSessions.__table__, Projects.__table__, ProjectStatus.__table__,
             Tasks.__table__, TaskStatusHistory.__table__, Labels.__table__, TaskLabels.__table__,
-            Subtasks.__table__, TodaySelections.__table__, Attachments.__table__, AttachmentCleanupJobs.__table__,
+            Subtasks.__table__, TodaySelections.__table__, Attachments.__table__, AttachmentBlobs.__table__,
         ):
             table.create(engine)
         self._session_factory = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-        self.storage = FakePrivateStorage()
         app = FastAPI()
         app.include_router(api_router, prefix="/v1")
         app.dependency_overrides[get_db] = self._get_test_db
-        app.dependency_overrides[get_attachment_storage] = lambda: self.storage
         self.client = TestClient(app, base_url="https://testserver")
 
     def tearDown(self) -> None:
@@ -164,16 +132,19 @@ class MvpMemberJourneyTests(unittest.TestCase):
 
         upload = self.client.post(
             f"/v1/tasks/{task_id}/attachments",
-            json={"filename": "brief.pdf", "media_type": "application/pdf", "byte_size": 5},
+            files={"file": ("brief.pdf", b"brief", "application/pdf")},
         )
         self.assertEqual(upload.status_code, 200)
-        attachment = upload.json()["attachment"]
+        attachment = upload.json()
+        self.assertEqual(attachment["state"], "pending")
         self.assertNotIn("storage_key", upload.text)
         finalized = self.client.post(f"/v1/tasks/{task_id}/attachments/{attachment['attachment_id']}/finalize")
         self.assertEqual(finalized.status_code, 200)
+        self.assertEqual(finalized.json()["state"], "available")
         download = self.client.get(f"/v1/tasks/{task_id}/attachments/{attachment['attachment_id']}/download")
         self.assertEqual(download.status_code, 200)
-        self.assertIn("storage.example.test/download/brief.pdf", download.json()["download_url"])
+        self.assertEqual(download.content, b"brief")
+        self.assertEqual(download.headers["content-type"], "application/pdf")
 
 
 if __name__ == "__main__":

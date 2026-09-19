@@ -36,7 +36,7 @@ const apiRequest = async <T>(
 ): Promise<ApiResponse<T>> => {
   const token = csrfToken();
   const headers: HeadersInit = {
-    'Content-Type': 'application/json',
+    ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
     ...(token && { 'X-CSRF-Token': token }),
     ...options.headers,
   };
@@ -208,16 +208,27 @@ export const todayApi = {
 
 export const attachmentApi = {
   list: (taskId: string) => apiRequest<Attachment[]>(`/v1/tasks/${taskId}/attachments`),
-  initiate: (taskId: string, file: File) => apiRequest<AttachmentUpload>(`/v1/tasks/${taskId}/attachments`, {
-    method: 'POST',
-    body: JSON.stringify({ filename: file.name, media_type: file.type, byte_size: file.size }),
-  }),
+  initiate: (taskId: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return apiRequest<Attachment>(`/v1/tasks/${taskId}/attachments`, { method: 'POST', body: form });
+  },
   finalize: (taskId: string, attachmentId: string) => apiRequest<Attachment>(
     `/v1/tasks/${taskId}/attachments/${attachmentId}/finalize`, { method: 'POST' }
   ),
-  download: (taskId: string, attachmentId: string) => apiRequest<AttachmentDownload>(
-    `/v1/tasks/${taskId}/attachments/${attachmentId}/download`
-  ),
+  download: async (taskId: string, attachmentId: string): Promise<ApiResponse<Blob>> => {
+    const token = csrfToken();
+    try {
+      const response = await fetch(`${API_BASE_URL}/v1/tasks/${taskId}/attachments/${attachmentId}/download`, {
+        headers: token ? { 'X-CSRF-Token': token } : {},
+        credentials: 'include',
+      });
+      if (!response.ok) return handleResponse<Blob>(response);
+      return { data: await response.blob() };
+    } catch {
+      return { error: 'Network error. Please check your connection.' };
+    }
+  },
   delete: (taskId: string, attachmentId: string) => apiRequest<void>(
     `/v1/tasks/${taskId}/attachments/${attachmentId}`, { method: 'DELETE' }
   ),
@@ -329,16 +340,4 @@ export interface Attachment {
   byte_size: number;
   state: 'pending' | 'available';
   created_at: string;
-}
-
-export interface AttachmentUpload {
-  attachment: Attachment;
-  upload_url: string;
-  upload_expires_at?: string;
-  upload_method?: 'PUT' | 'POST';
-  upload_fields?: Record<string, string> | null;
-}
-
-export interface AttachmentDownload {
-  download_url: string;
 }

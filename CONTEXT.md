@@ -48,6 +48,10 @@ _Avoid_: Tag, category
 A private supporting file attached to a task. Deleting its task or project permanently removes the attachment.
 _Avoid_: Document, upload
 
+**Attachment blob**:
+The private binary content of an Attachment, stored separately from its member-visible metadata during local development.
+_Avoid_: File record, storage key
+
 **Subtask**:
 A lightweight completion checklist entry nested beneath a task; it does not have independent task properties.
 _Avoid_: Checklist item, child ticket
