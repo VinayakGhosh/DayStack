@@ -42,6 +42,7 @@ const TaskModal = ({ open, onClose, onSubmit, onLabelsChange, onAttachmentsChang
   const [subtaskDraft, setSubtaskDraft] = useState('');
   const [queueCount, setQueueCount] = useState(0);
   const [uploadsActive, setUploadsActive] = useState(false);
+  const [persistedTaskId, setPersistedTaskId] = useState<string | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [cancelUploadsOpen, setCancelUploadsOpen] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; save?: string; label?: string }>({});
@@ -64,6 +65,7 @@ const TaskModal = ({ open, onClose, onSubmit, onLabelsChange, onAttachmentsChang
     setName(values.name); setDescription(values.description); setDueDate(values.dueDate); setPriority(values.priority);
     setLabelIds(values.labelIds); setSubtasks(values.subtasks); setStagedLabelNames([]); setLabelQuery(''); setSubtaskDraft('');
     setQueueCount(0); setErrors({}); setUploadsActive(false);
+    setPersistedTaskId(null);
     initialSnapshot.current = JSON.stringify({
       name: values.name.trim(), description: values.description.trim(), dueDate: values.dueDate,
       priority: values.priority, labelIds: [...values.labelIds].sort(), stagedLabelNames: [],
@@ -87,6 +89,13 @@ const TaskModal = ({ open, onClose, onSubmit, onLabelsChange, onAttachmentsChang
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (persistedTaskId) {
+      setErrors({});
+      const allUploaded = await attachmentRef.current?.uploadQueued(persistedTaskId);
+      if (allUploaded) onClose();
+      else setErrors({ save: 'One or more Attachments still failed. Retry or remove them.' });
+      return;
+    }
     if (!name.trim()) { setErrors({ name: 'Task name is required' }); return; }
     if (name.trim().length > 200) { setErrors({ name: 'Task name must be at most 200 characters' }); return; }
     const committedSubtasks = commitDraft();
@@ -96,6 +105,7 @@ const TaskModal = ({ open, onClose, onSubmit, onLabelsChange, onAttachmentsChang
       label_ids: labelIds, label_names: stagedLabelNames, subtasks: committedSubtasks,
     });
     if (!result.task) { setErrors((current) => ({ ...current, save: result.error || 'Task could not be saved. Please try again.' })); return; }
+    setPersistedTaskId(result.task.task_id);
     onLabelsChange?.(result.task.labels);
     if (attachmentRef.current?.hasQueuedFiles()) {
       const allUploaded = await attachmentRef.current.uploadQueued(result.task.task_id);
@@ -140,12 +150,12 @@ const TaskModal = ({ open, onClose, onSubmit, onLabelsChange, onAttachmentsChang
                 {subtasks.map((subtask, index) => <div key={`${subtask.text}-${index}`} className="flex items-center gap-2"><input aria-label={`Complete ${subtask.text}`} type="checkbox" checked={subtask.is_completed} onChange={() => setSubtasks((current) => current.map((item, position) => position === index ? { ...item, is_completed: !item.is_completed } : item))} /><span className="flex-1 text-sm">{subtask.text}</span><Button type="button" variant="ghost" size="sm" onClick={() => setSubtasks((current) => current.filter((_, position) => position !== index))}>Remove</Button></div>)}
                 <div className="flex gap-2"><Input id="subtask-draft" value={subtaskDraft} onChange={(event) => setSubtaskDraft(event.target.value)} placeholder="Add a Subtask" onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitDraft(); } }} /><Button type="button" variant="outline" onClick={commitDraft}>Add</Button></div>
               </div>
-              <AttachmentSection ref={attachmentRef} taskId={task?.task_id} onQueueChange={setQueueCount} onUploadingChange={setUploadsActive} onAvailableChange={onAttachmentsChange} />
+              <AttachmentSection ref={attachmentRef} taskId={task?.task_id ?? persistedTaskId ?? undefined} onQueueChange={setQueueCount} onUploadingChange={setUploadsActive} onAvailableChange={onAttachmentsChange} />
             </div>
             <DialogFooter className="shrink-0 border-t bg-background px-6 py-4 sm:items-center">
               {errors.save && <p role="alert" className="mr-auto text-sm text-destructive">{errors.save}</p>}
               <Button type="button" variant="outline" onClick={requestClose} disabled={Boolean(isLoading)}>Cancel</Button>
-              <Button type="submit" disabled={Boolean(isLoading) || uploadsActive}>{isLoading && <LoadingSpinner size="sm" className="mr-2" />}{task ? 'Save changes' : 'Create Task'}</Button>
+              <Button type="submit" disabled={Boolean(isLoading) || uploadsActive}>{isLoading && <LoadingSpinner size="sm" className="mr-2" />}{persistedTaskId ? 'Retry uploads' : task ? 'Save changes' : 'Create Task'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
