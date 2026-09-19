@@ -45,6 +45,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const COLUMN_BORDER_COLORS = [
   'border-slate-400',
@@ -71,12 +72,14 @@ const SortableTaskCard = ({
   onEdit,
   onDelete,
   onStatusChange,
+  highlighted,
 }: {
   task: Task;
   statuses: ProjectStatus[];
   onEdit: (t: Task) => void;
   onDelete: (t: Task) => void;
   onStatusChange: (t: Task, statusId: string) => void;
+  highlighted?: boolean;
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.task_id,
@@ -90,13 +93,15 @@ const SortableTaskCard = ({
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="touch-none">
+    <div ref={setNodeRef} style={style}>
       <TaskCard
         task={task}
         statuses={statuses}
-        onEdit={onEdit}
+        onOpen={onEdit}
         onDelete={onDelete}
-        onStatusChange={onStatusChange}
+        onToggleCompletion={(selected, completed) => onStatusChange(selected, completed ? '__complete__' : '__reopen__')}
+        dragHandleProps={{ ...attributes, ...listeners }}
+        highlighted={highlighted}
       />
     </div>
   );
@@ -143,6 +148,10 @@ const ProjectDetailsPage = () => {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [deletingTask, setDeletingTask] = useState<Task | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newTaskId, setNewTaskId] = useState<string | null>(null);
+  const [completionCandidate, setCompletionCandidate] = useState<ProjectStatus | null>(null);
+  const addTaskButtonRef = useRef<HTMLButtonElement | null>(null);
+  const focusReturnRef = useRef<HTMLElement | null>(null);
 
   // Status management panel
   const [statusPanelOpen, setStatusPanelOpen] = useState(false);
@@ -192,7 +201,7 @@ const ProjectDetailsPage = () => {
   // ── Task CRUD ──────────────────────────────────────────────────────────────
 
   const handleCreateTask = async (data: TaskInput) => {
-    if (!id) return;
+    if (!id) return { error: 'Project not found.' };
     setIsSubmitting(true);
 
     const { data: newTask, error } = await tasksApi.create({
@@ -204,15 +213,18 @@ const ProjectDetailsPage = () => {
 
     if (newTask) {
       setTasks((prev) => [newTask, ...prev]);
-      setModalOpen(false);
+      setLabels((current) => [...current, ...newTask.labels.filter((label) => !current.some((item) => item.label_id === label.label_id))]);
+      setNewTaskId(newTask.task_id);
       toast({ title: 'Task created' });
+      return { task: newTask };
     } else {
       toast({ title: 'Failed to create task', description: error, variant: 'destructive' });
+      return { error };
     }
   };
 
   const handleEditTask = async (data: TaskInput) => {
-    if (!editingTask) return;
+    if (!editingTask) return { error: 'Task not found.' };
     setIsSubmitting(true);
 
     const { data: updatedTask, error } = await tasksApi.update(editingTask.task_id, data);
@@ -221,12 +233,22 @@ const ProjectDetailsPage = () => {
 
     if (updatedTask) {
       setTasks((prev) => prev.map((t) => (t.task_id === editingTask.task_id ? updatedTask : t)));
-      setEditingTask(null);
+      setLabels((current) => [...current, ...updatedTask.labels.filter((label) => !current.some((item) => item.label_id === label.label_id))]);
       toast({ title: 'Task updated' });
+      return { task: updatedTask };
     } else {
       toast({ title: 'Failed to update task', description: error, variant: 'destructive' });
+      return { error };
     }
   };
+
+  useEffect(() => {
+    if (!newTaskId || modalOpen) return;
+    const element = document.querySelector<HTMLElement>(`[data-task-id="${newTaskId}"]`);
+    element?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const timeout = window.setTimeout(() => setNewTaskId(null), 1800);
+    return () => window.clearTimeout(timeout);
+  }, [modalOpen, newTaskId, tasks]);
 
   const handleDeleteTask = async () => {
     if (!deletingTask) return;
@@ -241,7 +263,24 @@ const ProjectDetailsPage = () => {
     setDeletingTask(null);
   };
 
+  const openTaskDetails = (task: Task) => {
+    focusReturnRef.current = document.querySelector<HTMLElement>(`[data-task-open-id="${task.task_id}"]`);
+    setEditingTask(task);
+  };
+
+  const closeTaskModal = () => {
+    setModalOpen(false);
+    setEditingTask(null);
+    window.setTimeout(() => focusReturnRef.current?.focus(), 0);
+  };
+
   const handleStatusChange = async (task: Task, statusId: string) => {
+    if (statusId === '__complete__' || statusId === '__reopen__') {
+      const { data, error } = await tasksApi.setCompleted(task.task_id, statusId === '__complete__');
+      if (data) setTasks((current) => current.map((item) => item.task_id === task.task_id ? data : item));
+      else toast({ title: 'Failed to update completion', description: error, variant: 'destructive' });
+      return;
+    }
     // Optimistic update
     setTasks((prev) =>
       prev.map((t) => {
@@ -419,6 +458,13 @@ const ProjectDetailsPage = () => {
 
   const handleChooseCompletionStatus = async (status: ProjectStatus) => {
     if (!id || status.is_completion) return;
+    const oldCompletion = statuses.find((candidate) => candidate.is_completion);
+    const targetCount = tasks.filter((task) => task.status_id === status.status_id).length;
+    const oldCount = oldCompletion ? tasks.filter((task) => task.status_id === oldCompletion.status_id).length : 0;
+    if ((targetCount > 0 || oldCount > 0) && completionCandidate?.status_id !== status.status_id) {
+      setCompletionCandidate(status);
+      return;
+    }
     setStatusSubmitting(true);
     const { error } = await projectStatusApi.update(id, status.status_id, { is_completion: true });
     setStatusSubmitting(false);
@@ -428,6 +474,7 @@ const ProjectDetailsPage = () => {
       return;
     }
     await fetchData();
+    setCompletionCandidate(null);
     toast({ title: `"${status.name}" is now the completion status` });
   };
 
@@ -523,7 +570,7 @@ const ProjectDetailsPage = () => {
                 <Settings2 className="mr-1.5 h-4 w-4" />
                 Statuses
               </Button>
-              <Button size="sm" onClick={() => setModalOpen(true)}>
+              <Button ref={addTaskButtonRef} size="sm" onClick={() => { focusReturnRef.current = addTaskButtonRef.current; setModalOpen(true); }}>
                 <Plus className="mr-1.5 h-4 w-4" />
                 Add Task
               </Button>
@@ -588,9 +635,10 @@ const ProjectDetailsPage = () => {
                                 key={task.task_id}
                                 task={task}
                                 statuses={statuses}
-                                onEdit={(t) => setEditingTask(t)}
+                                onEdit={openTaskDetails}
                                 onDelete={(t) => setDeletingTask(t)}
                                 onStatusChange={handleStatusChange}
+                                highlighted={newTaskId === task.task_id}
                               />
                             ))
                           )}
@@ -609,9 +657,9 @@ const ProjectDetailsPage = () => {
                   <TaskCard
                     task={activeTask}
                     statuses={statuses}
-                    onEdit={() => { }}
+                    onOpen={() => { }}
                     onDelete={() => { }}
-                    onStatusChange={() => { }}
+                    onToggleCompletion={() => { }}
                   />
                 </div>
               )}
@@ -624,15 +672,25 @@ const ProjectDetailsPage = () => {
       {/* Create/Edit Task Modal */}
       <TaskModal
         open={modalOpen || !!editingTask}
-        onClose={() => {
-          setModalOpen(false);
-          setEditingTask(null);
-        }}
+        onClose={closeTaskModal}
         onSubmit={editingTask ? handleEditTask : handleCreateTask}
         task={editingTask}
         labels={labels}
         isLoading={isSubmitting}
+        onLabelsChange={(savedLabels) => setLabels((current) => [...current, ...savedLabels.filter((label) => !current.some((item) => item.label_id === label.label_id))])}
+        onAttachmentsChange={async () => {
+          if (!id) return;
+          const response = await tasksApi.getByProject(id);
+          if (response.data) setTasks(response.data);
+        }}
       />
+
+      <AlertDialog open={Boolean(completionCandidate)} onOpenChange={(open) => !open && setCompletionCandidate(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader><AlertDialogTitle>Change completion status?</AlertDialogTitle><AlertDialogDescription>{tasks.filter((task) => task.status_id === completionCandidate?.status_id).length} Task(s) in “{completionCandidate?.name}” will become completed, and {tasks.filter((task) => task.status_id === statuses.find((status) => status.is_completion)?.status_id).length} Task(s) in the current completion status will become active.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => completionCandidate && handleChooseCompletionStatus(completionCandidate)}>Change completion status</AlertDialogAction></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Task Confirmation */}
       <AlertDialog open={!!deletingTask} onOpenChange={() => setDeletingTask(null)}>
@@ -716,7 +774,7 @@ const ProjectDetailsPage = () => {
                   <div
                     key={status.status_id}
                     className={cn(
-                      'flex items-center gap-2 p-3 rounded-lg border bg-card',
+                      'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 p-3 rounded-lg border bg-card',
                       `border-l-4 ${borderColor}`
                     )}
                   >
@@ -738,6 +796,7 @@ const ProjectDetailsPage = () => {
                           className="h-7 w-7 text-green-600"
                           onClick={handleUpdateStatus}
                           disabled={statusSubmitting}
+                          aria-label={`Save ${status.name}`}
                         >
                           <Check className="h-3.5 w-3.5" />
                         </Button>
@@ -746,77 +805,22 @@ const ProjectDetailsPage = () => {
                           variant="ghost"
                           className="h-7 w-7"
                           onClick={() => setEditingStatus(null)}
+                          aria-label={`Cancel editing ${status.name}`}
                         >
                           <X className="h-3.5 w-3.5" />
                         </Button>
                       </>
                     ) : (
                       <>
-                        <span className="flex-1 text-sm font-medium">{status.name}</span>
-                        {status.is_completion && (
-                          <span className="text-xs text-green-700 dark:text-green-400">Completion</span>
-                        )}
-                        <span className="text-xs text-muted-foreground">{taskCount} task{taskCount !== 1 ? 's' : ''}</span>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7"
-                          onClick={() => handleReorderStatus(status.status_id, -1)}
-                          disabled={idx === 0 || statusSubmitting}
-                          title="Move status left"
-                        >
-                          <ChevronLeft className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7"
-                          onClick={() => handleReorderStatus(status.status_id, 1)}
-                          disabled={idx === statuses.length - 1 || statusSubmitting}
-                          title="Move status right"
-                        >
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-green-700 dark:text-green-400"
-                          onClick={() => handleChooseCompletionStatus(status)}
-                          disabled={status.is_completion || statusSubmitting}
-                          title={status.is_completion ? 'Completion status' : 'Make completion status'}
-                        >
-                          <CircleCheck className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7"
-                          onClick={() => {
-                            setEditingStatus(status);
-                            setEditingStatusName(status.name);
-                          }}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-destructive hover:text-destructive"
-                          onClick={() => {
-                            setDeletingStatus(status);
-                            setReassignmentStatusId(
-                              statuses.find((candidate) => candidate.status_id !== status.status_id)?.status_id ?? ''
-                            );
-                          }}
-                          disabled={status.is_completion}
-                          title={
-                            status.is_completion
-                                ? 'Choose another completion status before deletion'
-                                : 'Delete status'
-                          }
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="min-w-0"><span className="block truncate text-sm font-medium">{status.name}</span>{status.is_completion && <Badge variant="outline" className="mt-1 gap-1 border-green-600/30 text-[11px] text-green-700 dark:text-green-400"><CircleCheck className="h-3 w-3" />Completion status</Badge>}</div>
+                        <span className="whitespace-nowrap text-xs text-muted-foreground">{taskCount} task{taskCount !== 1 ? 's' : ''}</span>
+                        <div className="col-span-2 flex justify-end gap-1 border-t pt-2">
+                          <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleReorderStatus(status.status_id, -1)} disabled={idx === 0 || statusSubmitting} aria-label={`Move ${status.name} left`}><ChevronLeft className="h-3.5 w-3.5" /></Button></TooltipTrigger><TooltipContent>Move left</TooltipContent></Tooltip>
+                          <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleReorderStatus(status.status_id, 1)} disabled={idx === statuses.length - 1 || statusSubmitting} aria-label={`Move ${status.name} right`}><ChevronRight className="h-3.5 w-3.5" /></Button></TooltipTrigger><TooltipContent>Move right</TooltipContent></Tooltip>
+                          <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="h-7 w-7 text-green-700 dark:text-green-400" onClick={() => handleChooseCompletionStatus(status)} disabled={status.is_completion || statusSubmitting} aria-label={status.is_completion ? `${status.name} is the completion status` : `Make ${status.name} the completion status`}><CircleCheck className="h-3.5 w-3.5" /></Button></TooltipTrigger><TooltipContent>{status.is_completion ? 'Current completion status' : 'Make completion status'}</TooltipContent></Tooltip>
+                          <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="h-7 w-7" aria-label={`Edit ${status.name}`} onClick={() => { setEditingStatus(status); setEditingStatusName(status.name); }}><Pencil className="h-3.5 w-3.5" /></Button></TooltipTrigger><TooltipContent>Edit status</TooltipContent></Tooltip>
+                          <Tooltip><TooltipTrigger asChild><Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" aria-label={status.is_completion ? `Cannot delete completion status ${status.name}` : `Delete ${status.name}`} onClick={() => { setDeletingStatus(status); setReassignmentStatusId(statuses.find((candidate) => candidate.status_id !== status.status_id)?.status_id ?? ''); }} disabled={status.is_completion}><Trash2 className="h-3.5 w-3.5" /></Button></TooltipTrigger><TooltipContent>{status.is_completion ? 'Choose another completion status before deletion' : 'Delete status'}</TooltipContent></Tooltip>
+                        </div>
                       </>
                     )}
                   </div>

@@ -168,6 +168,12 @@ export const tasksApi = {
       body: JSON.stringify({ status_id }),
     }),
 
+  setCompleted: (id: string, completed: boolean) =>
+    apiRequest<Task>(`/v1/tasks/${id}/completion`, {
+      method: 'PATCH',
+      body: JSON.stringify({ completed }),
+    }),
+
   delete: (id: string) =>
     apiRequest<void>(`/v1/tasks/${id}`, {
       method: 'DELETE',
@@ -208,10 +214,10 @@ export const todayApi = {
 
 export const attachmentApi = {
   list: (taskId: string) => apiRequest<Attachment[]>(`/v1/tasks/${taskId}/attachments`),
-  initiate: (taskId: string, file: File) => {
+  initiate: (taskId: string, file: File, signal?: AbortSignal) => {
     const form = new FormData();
     form.append('file', file);
-    return apiRequest<Attachment>(`/v1/tasks/${taskId}/attachments`, { method: 'POST', body: form });
+    return apiRequest<Attachment>(`/v1/tasks/${taskId}/attachments`, { method: 'POST', body: form, signal });
   },
   finalize: (taskId: string, attachmentId: string) => apiRequest<Attachment>(
     `/v1/tasks/${taskId}/attachments/${attachmentId}/finalize`, { method: 'POST' }
@@ -278,6 +284,7 @@ export interface Task {
   priority: Priority;
   labels: Label[];
   subtasks: Subtask[];
+  attachment_count: number;
   status_id: string | null;
   status_name?: string | null;
   created_by: string;
@@ -311,6 +318,7 @@ export interface TaskInput {
   due_date?: string | null;
   priority: Priority;
   label_ids?: string[];
+  label_names?: string[];
   subtasks?: SubtaskInput[];
 }
 

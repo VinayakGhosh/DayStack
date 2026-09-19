@@ -2,10 +2,69 @@
 
 from test_project_workflows import ProjectWorkflowTests
 
-from task_workspace.sqlalchemy_repository import WorkspaceTaskLimitReached
+from models.Task import Attachments, Labels
+from task_workspace.sqlalchemy_repository import WorkspaceConflict, WorkspaceTaskLimitReached
 
 
 class TaskDetailsTests(ProjectWorkflowTests):
+    def test_task_response_includes_available_attachment_count(self) -> None:
+        project = self.workspace.create_project(self.member_id, "Client launch", None)
+        task = self.workspace.create_task(self.member_id, project.project_id, "Prepare brief", None)
+        self.db.add_all([
+            Attachments(task_id=task["task_id"], filename="brief.pdf", media_type="application/pdf", byte_size=12, upload_state="available"),
+            Attachments(task_id=task["task_id"], filename="draft.pdf", media_type="application/pdf", byte_size=8, upload_state="pending"),
+        ])
+        self.db.commit()
+
+        refreshed = self.workspace.list_tasks(self.member_id, task["task_id"], None, None)[0]
+
+        self.assertEqual(refreshed["attachment_count"], 1)
+
+    def test_staged_label_names_are_reused_or_created_with_task_save(self) -> None:
+        project = self.workspace.create_project(self.member_id, "Client launch", None)
+        existing = self.workspace.create_label(self.member_id, "Research", None)
+
+        task = self.workspace.create_task(
+            self.member_id,
+            project.project_id,
+            "Prepare brief",
+            None,
+            label_ids=[existing["label_id"]],
+            label_names=["  Client Work  ", "research"],
+        )
+
+        self.assertEqual([label["name"] for label in task["labels"]], ["Client Work", "Research"])
+        self.assertEqual(self.db.query(Labels).filter(Labels.member_id == self.member_id).count(), 2)
+
+    def test_failed_task_save_rolls_back_staged_labels(self) -> None:
+        project = self.workspace.create_project(self.member_id, "Client launch", None)
+
+        with self.assertRaises(WorkspaceConflict):
+            self.workspace.create_task(
+                self.member_id,
+                project.project_id,
+                "Prepare brief",
+                None,
+                label_names=["Temporary"],
+                subtasks=[{"text": "   ", "is_completed": False}],
+            )
+
+        self.assertEqual(self.db.query(Labels).filter(Labels.member_id == self.member_id).count(), 0)
+
+    def test_completion_toggle_reopens_in_most_recent_valid_active_status(self) -> None:
+        project = self.workspace.create_project(self.member_id, "Client launch", None)
+        statuses = self.workspace.list_statuses(self.member_id, project.project_id)
+        active = statuses[1]
+        completion = next(status for status in statuses if status.is_completion)
+        task = self.workspace.create_task(self.member_id, project.project_id, "Prepare brief", None)
+        self.workspace.move_task_to_status(self.member_id, task["task_id"], active.status_id)
+
+        completed = self.workspace.set_task_completed(self.member_id, task["task_id"], True)
+        reopened = self.workspace.set_task_completed(self.member_id, task["task_id"], False)
+
+        self.assertEqual(completed["status_id"], completion.status_id)
+        self.assertEqual(reopened["status_id"], active.status_id)
+
     def test_task_details_labels_and_subtasks_are_member_scoped_and_ordered(self) -> None:
         project = self.workspace.create_project(self.member_id, "Client launch", None)
         task = self.workspace.create_task(

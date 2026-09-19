@@ -19,6 +19,7 @@ from schema.task import (
     TaskQuotaResponse,
     TaskResponseSchema,
     ToggleSubtask,
+    ToggleTaskCompletion,
 )
 from task_workspace.service import TaskWorkspace
 from task_workspace.sqlalchemy_repository import (
@@ -57,7 +58,7 @@ def create_task(
     try:
         return _workspace(db).create_task(
             current_user.user_id, payload.project_id, payload.name, payload.description,
-            payload.due_date, payload.priority, payload.label_ids, _subtasks(payload.subtasks),
+            payload.due_date, payload.priority, payload.label_ids, _subtasks(payload.subtasks), payload.label_names,
         )
     except WorkspaceProblem as error:
         _raise_workspace_error(error)
@@ -69,7 +70,7 @@ def update_task(task_id: UUID, payload: PatchTask, db: Session = Depends(get_db)
         return _workspace(db).update_task(
             current_user.user_id, task_id, payload.name, payload.description,
             payload.due_date, payload.priority, payload.label_ids, _subtasks(payload.subtasks),
-            payload.model_fields_set,
+            payload.model_fields_set, payload.label_names,
         )
     except WorkspaceProblem as error:
         _raise_workspace_error(error)
@@ -101,6 +102,16 @@ def update_task_status(
 ):
     try:
         return _workspace(db).set_task_status(current_user.user_id, task_id, payload.status_id)
+    except WorkspaceProblem as error:
+        _raise_workspace_error(error)
+
+
+@router.patch("/{task_id}/completion", response_model=TaskResponseSchema)
+def update_task_completion(
+    task_id: UUID, payload: ToggleTaskCompletion, db: Session = Depends(get_db), current_user=Depends(get_current_user),
+):
+    try:
+        return _workspace(db).set_task_completed(current_user.user_id, task_id, payload.completed)
     except WorkspaceProblem as error:
         _raise_workspace_error(error)
 

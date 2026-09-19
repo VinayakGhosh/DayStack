@@ -94,11 +94,11 @@ class TaskWorkspace:
             member_id, project_id, status_id, reassign_to_status_id
         )
 
-    def create_task(self, member_id: UUID, project_id: UUID, name: str, description: str | None, due_date=None, priority: str = "none", label_ids=None, subtasks=None):
-        return self._repository.create_task(member_id, project_id, name, description, due_date, priority, label_ids, subtasks)
+    def create_task(self, member_id: UUID, project_id: UUID, name: str, description: str | None, due_date=None, priority: str = "none", label_ids=None, subtasks=None, label_names=None):
+        return self._repository.create_task(member_id, project_id, name, description, due_date, priority, label_ids, subtasks, label_names)
 
-    def update_task(self, member_id: UUID, task_id: UUID, name: str | None, description: str | None, due_date=None, priority: str | None = None, label_ids=None, subtasks=None, updated_fields=None):
-        return self._repository.update_task(member_id, task_id, name, description, due_date, priority, label_ids, subtasks, updated_fields)
+    def update_task(self, member_id: UUID, task_id: UUID, name: str | None, description: str | None, due_date=None, priority: str | None = None, label_ids=None, subtasks=None, updated_fields=None, label_names=None):
+        return self._repository.update_task(member_id, task_id, name, description, due_date, priority, label_ids, subtasks, updated_fields, label_names)
 
     def list_tasks(self, member_id: UUID, task_id: UUID | None, project_id: UUID | None, status_id: UUID | None):
         return self._repository.list_tasks(member_id, task_id, project_id, status_id)
@@ -108,6 +108,9 @@ class TaskWorkspace:
 
     def set_task_status(self, member_id: UUID, task_id: UUID, status_id: UUID):
         return self._repository.set_task_status(member_id, task_id, status_id)
+
+    def set_task_completed(self, member_id: UUID, task_id: UUID, completed: bool):
+        return self._repository.set_task_completed(member_id, task_id, completed)
 
     def task_quota(self, member_id: UUID, project_id: UUID):
         return self._repository.task_quota(member_id, project_id)

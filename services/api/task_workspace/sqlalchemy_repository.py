@@ -324,7 +324,14 @@ class SqlAlchemyTaskWorkspaceRepository:
             remaining_status.display_order = display_order
         self._db.commit()
 
-    def create_task(self, member_id, project_id, name, description, due_date=None, priority="none", label_ids=None, subtasks=None):
+    def create_task(self, member_id, project_id, name, description, due_date=None, priority="none", label_ids=None, subtasks=None, label_names=None):
+        try:
+            return self._create_task(member_id, project_id, name, description, due_date, priority, label_ids, subtasks, label_names)
+        except Exception:
+            self._db.rollback()
+            raise
+
+    def _create_task(self, member_id, project_id, name, description, due_date=None, priority="none", label_ids=None, subtasks=None, label_names=None):
         self._locked_personal_project(member_id, project_id)
         self._ensure_task_capacity(project_id)
         todo = self._db.query(ProjectStatus).filter(
@@ -335,7 +342,8 @@ class SqlAlchemyTaskWorkspaceRepository:
                      name=name, description=description, due_date=self._date(due_date), priority=self._priority(priority))
         self._db.add(task)
         self._db.flush()
-        self._set_task_labels(member_id, task.task_id, label_ids or [])
+        resolved_label_ids = self._resolve_task_label_ids(member_id, label_ids or [], label_names or [])
+        self._set_task_labels(member_id, task.task_id, resolved_label_ids)
         self._replace_subtasks(task.task_id, subtasks or [])
         self._db.add(TaskStatusHistory(task_id=task.task_id, old_status_id=None, old_status_name=None,
                                        new_status_id=todo.status_id if todo else None,
@@ -344,11 +352,18 @@ class SqlAlchemyTaskWorkspaceRepository:
         self._db.refresh(task)
         return self._task_response(task)
 
-    def update_task(self, member_id, task_id, name, description, due_date=None, priority=None, label_ids=None, subtasks=None, updated_fields=None):
+    def update_task(self, member_id, task_id, name, description, due_date=None, priority=None, label_ids=None, subtasks=None, updated_fields=None, label_names=None):
+        try:
+            return self._update_task(member_id, task_id, name, description, due_date, priority, label_ids, subtasks, updated_fields, label_names)
+        except Exception:
+            self._db.rollback()
+            raise
+
+    def _update_task(self, member_id, task_id, name, description, due_date=None, priority=None, label_ids=None, subtasks=None, updated_fields=None, label_names=None):
         task = self._task(member_id, task_id)
         updated_fields = updated_fields or {field for field, value in {
             "name": name, "description": description, "due_date": due_date, "priority": priority,
-            "label_ids": label_ids, "subtasks": subtasks,
+            "label_ids": label_ids, "label_names": label_names, "subtasks": subtasks,
         }.items() if value is not None}
         if "name" in updated_fields:
             task.name = name
@@ -358,8 +373,9 @@ class SqlAlchemyTaskWorkspaceRepository:
             task.due_date = self._date(due_date)
         if "priority" in updated_fields:
             task.priority = self._priority(priority)
-        if "label_ids" in updated_fields:
-            self._set_task_labels(member_id, task.task_id, label_ids or [])
+        if "label_ids" in updated_fields or "label_names" in updated_fields:
+            resolved_label_ids = self._resolve_task_label_ids(member_id, label_ids or [], label_names or [])
+            self._set_task_labels(member_id, task.task_id, resolved_label_ids)
         if "subtasks" in updated_fields:
             self._replace_subtasks(task.task_id, subtasks or [])
         self._db.commit()
@@ -379,7 +395,14 @@ class SqlAlchemyTaskWorkspaceRepository:
             query = query.filter(Tasks.project_id == project_id)
         if status_id is not None:
             query = query.filter(Tasks.status_id == status_id)
-        return [self._task_response(task) for task in query.order_by(Tasks.created_at.desc()).all()]
+        attachment_count = select(func.count(Attachments.attachment_id)).where(
+            Attachments.task_id == Tasks.task_id,
+            Attachments.upload_state == "available",
+        ).correlate(Tasks).scalar_subquery()
+        return [
+            self._task_response(task, count)
+            for task, count in query.add_columns(attachment_count).order_by(Tasks.created_at.desc()).all()
+        ]
 
     def delete_task(self, member_id, task_id):
         task = self._task(member_id, task_id)
@@ -387,20 +410,41 @@ class SqlAlchemyTaskWorkspaceRepository:
         self._db.commit()
 
     def set_task_status(self, member_id, task_id, status_id):
-        task = self._locked_task(member_id, task_id)
-        status = self._status(task.project_id, status_id)
-        self._ensure_status_move_capacity(task, status)
-        task.status_id = status.status_id
-        task.status_name = status.name
-        if status.is_completion:
-            self._db.query(TodaySelections).filter(TodaySelections.task_id == task.task_id).delete()
-        self._db.commit()
-        self._db.refresh(task)
-        return self._task_response(task)
+        return self.move_task_to_status(member_id, task_id, status_id)
 
     def move_task_to_status(self, member_id, task_id, status_id):
         task = self._locked_task(member_id, task_id)
         status = self._status(task.project_id, status_id)
+        return self._move_locked_task(member_id, task, status)
+
+    def set_task_completed(self, member_id, task_id, completed):
+        task = self._locked_task(member_id, task_id)
+        statuses = self._locked_statuses(task.project_id)
+        current = self._status_from(statuses, task.status_id) if task.status_id else None
+        if bool(current and current.is_completion) == completed:
+            return self._task_response(task)
+        if completed:
+            target = next((status for status in statuses if status.is_completion), None)
+            if target is None:
+                raise WorkspaceConflict("This Project needs a completion status.", code="completion_status_required")
+        else:
+            active_by_id = {status.status_id: status for status in statuses if not status.is_completion}
+            target = None
+            for history in self._db.query(TaskStatusHistory).filter(
+                TaskStatusHistory.task_id == task.task_id,
+            ).order_by(TaskStatusHistory.created_at.desc(), TaskStatusHistory.id.desc()).all():
+                if history.old_status_id in active_by_id:
+                    target = active_by_id[history.old_status_id]
+                    break
+            if target is None:
+                target = next((status for status in statuses if not status.is_completion), None)
+            if target is None:
+                raise WorkspaceConflict("This Project needs an active Workflow status.", code="active_status_required")
+        return self._move_locked_task(member_id, task, target)
+
+    def _move_locked_task(self, member_id, task, status):
+        if task.status_id == status.status_id:
+            return self._task_response(task)
         self._ensure_status_move_capacity(task, status)
         self._db.add(TaskStatusHistory(task_id=task.task_id, old_status_id=task.status_id,
                                        old_status_name=task.status_name, new_status_id=status.status_id,
@@ -755,7 +799,12 @@ class SqlAlchemyTaskWorkspaceRepository:
         for position, (selection, _) in enumerate(selections):
             selection.display_order = position
 
-    def _task_response(self, task):
+    def _task_response(self, task, attachment_count=None):
+        if attachment_count is None:
+            attachment_count = self._db.query(func.count(Attachments.attachment_id)).filter(
+                Attachments.task_id == task.task_id,
+                Attachments.upload_state == "available",
+            ).scalar()
         return {
             "task_id": task.task_id,
             "project_id": task.project_id,
@@ -772,6 +821,7 @@ class SqlAlchemyTaskWorkspaceRepository:
             "subtasks": [self._subtask_response(subtask) for subtask in self._db.query(Subtasks).filter(
                 Subtasks.task_id == task.task_id
             ).order_by(Subtasks.display_order).all()],
+            "attachment_count": attachment_count or 0,
             "created_at": task.created_at,
             "updated_at": task.updated_at,
         }
@@ -803,6 +853,31 @@ class SqlAlchemyTaskWorkspaceRepository:
         self._db.query(TaskLabels).filter(TaskLabels.task_id == task_id).delete()
         for label in labels:
             self._db.add(TaskLabels(task_id=task_id, label_id=label.label_id))
+
+    def _resolve_task_label_ids(self, member_id, label_ids, label_names):
+        resolved = list(label_ids)
+        seen_names = set()
+        for raw_name in label_names:
+            name = " ".join(raw_name.split())
+            if not name:
+                raise WorkspaceConflict("A Label needs a name.", code="invalid_label")
+            if len(name) > 64:
+                raise WorkspaceConflict("Label names can be at most 64 characters.", code="invalid_label")
+            normalized = name.casefold()
+            if normalized in seen_names:
+                continue
+            seen_names.add(normalized)
+            label = self._db.query(Labels).filter(
+                Labels.member_id == member_id,
+                func.lower(Labels.name) == normalized,
+            ).first()
+            if label is None:
+                label = Labels(member_id=member_id, name=name, color=None)
+                self._db.add(label)
+                self._db.flush()
+            if label.label_id not in resolved:
+                resolved.append(label.label_id)
+        return resolved
 
     def _replace_subtasks(self, task_id, subtasks):
         self._db.query(Subtasks).filter(Subtasks.task_id == task_id).delete()

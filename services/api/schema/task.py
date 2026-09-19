@@ -43,6 +43,7 @@ class TaskCreateSchema(BaseModel):
     due_date: date | None = None
     priority: Priority = "none"
     label_ids: list[UUID] = []
+    label_names: list[str] = Field(default_factory=list)
     subtasks: list[SubtaskInput] = []
 
 
@@ -58,6 +59,7 @@ class TaskResponseSchema(BaseModel):
     priority: Priority
     labels: list[LabelResponse]
     subtasks: list[SubtaskResponse]
+    attachment_count: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -67,11 +69,16 @@ class PatchTask(BaseModel):
     due_date: date | None = None
     priority: Priority | None = None
     label_ids: list[UUID] | None = None
+    label_names: list[str] | None = None
     subtasks: list[SubtaskInput] | None = None
 
 
 class PatchTaskStatus(BaseModel):
     status_id: UUID
+
+
+class ToggleTaskCompletion(BaseModel):
+    completed: bool
 
 
 class TaskQuotaResponse(BaseModel):
