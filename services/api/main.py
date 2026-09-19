@@ -4,8 +4,10 @@ from routes import api_router
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
+from models import register_models
 
 load_dotenv()
+register_models()
 
 
 def _cors_origins() -> list[str]:
