@@ -448,7 +448,8 @@ class SqlAlchemyTaskWorkspaceRepository:
         self._ensure_status_move_capacity(task, status)
         self._db.add(TaskStatusHistory(task_id=task.task_id, old_status_id=task.status_id,
                                        old_status_name=task.status_name, new_status_id=status.status_id,
-                                       new_status_name=status.name, changed_by=member_id))
+                                       new_status_name=status.name, changed_by=member_id,
+                                       created_at=datetime.now(ZoneInfo("UTC"))))
         task.status_id = status.status_id
         task.status_name = status.name
         if status.is_completion:

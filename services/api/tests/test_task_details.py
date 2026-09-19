@@ -2,7 +2,7 @@
 
 from test_project_workflows import ProjectWorkflowTests
 
-from models.Task import Attachments, Labels
+from models.Task import Attachments, Labels, Tasks, TaskStatusHistory
 from task_workspace.sqlalchemy_repository import WorkspaceConflict, WorkspaceTaskLimitReached
 
 
@@ -64,6 +64,34 @@ class TaskDetailsTests(ProjectWorkflowTests):
 
         self.assertEqual(completed["status_id"], completion.status_id)
         self.assertEqual(reopened["status_id"], active.status_id)
+
+    def test_reopen_falls_back_to_first_active_status_when_history_is_absent(self) -> None:
+        project = self.workspace.create_project(self.member_id, "Client launch", None)
+        statuses = self.workspace.list_statuses(self.member_id, project.project_id)
+        completion = next(status for status in statuses if status.is_completion)
+        task = self.workspace.create_task(self.member_id, project.project_id, "Prepare brief", None)
+        self.db.query(TaskStatusHistory).filter(TaskStatusHistory.task_id == task["task_id"]).delete()
+        stored = self.db.query(Tasks).filter(Tasks.task_id == task["task_id"]).one()
+        stored.status_id = completion.status_id
+        stored.status_name = completion.name
+        self.db.commit()
+
+        reopened = self.workspace.set_task_completed(self.member_id, task["task_id"], False)
+
+        self.assertEqual(reopened["status_id"], statuses[0].status_id)
+
+    def test_reopen_ignores_a_deleted_prior_active_status(self) -> None:
+        project = self.workspace.create_project(self.member_id, "Client launch", None)
+        statuses = self.workspace.list_statuses(self.member_id, project.project_id)
+        prior = statuses[1]
+        task = self.workspace.create_task(self.member_id, project.project_id, "Prepare brief", None)
+        self.workspace.move_task_to_status(self.member_id, task["task_id"], prior.status_id)
+        self.workspace.set_task_completed(self.member_id, task["task_id"], True)
+        self.workspace.delete_status(self.member_id, project.project_id, prior.status_id)
+
+        reopened = self.workspace.set_task_completed(self.member_id, task["task_id"], False)
+
+        self.assertEqual(reopened["status_id"], statuses[0].status_id)
 
     def test_task_details_labels_and_subtasks_are_member_scoped_and_ordered(self) -> None:
         project = self.workspace.create_project(self.member_id, "Client launch", None)

@@ -677,6 +677,12 @@ const ProjectDetailsPage = () => {
         open={modalOpen || !!editingTask}
         onClose={closeTaskModal}
         onSubmit={editingTask ? handleEditTask : handleCreateTask}
+        onPersistedTaskUpdate={async (taskId, data) => {
+          const response = await tasksApi.update(taskId, data);
+          if (!response.data) return { error: response.error };
+          setTasks((current) => current.map((item) => item.task_id === taskId ? response.data! : item));
+          return { task: response.data };
+        }}
         task={editingTask}
         labels={labels}
         isLoading={isSubmitting}

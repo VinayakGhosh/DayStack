@@ -18,6 +18,7 @@ interface TaskModalProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (data: TaskInput) => Promise<SubmitResult>;
+  onPersistedTaskUpdate?: (taskId: string, data: TaskInput) => Promise<SubmitResult>;
   onLabelsChange?: (labels: TaskLabel[]) => void;
   onAttachmentsChange?: () => void;
   task?: Task | null;
@@ -53,7 +54,7 @@ const normalizedSnapshot = (form: TaskFormSnapshot) => JSON.stringify({
   queueCount: form.queueCount,
 });
 
-const TaskModal = ({ open, onClose, onSubmit, onLabelsChange, onAttachmentsChange, task, labels, isLoading }: TaskModalProps) => {
+const TaskModal = ({ open, onClose, onSubmit, onPersistedTaskUpdate, onLabelsChange, onAttachmentsChange, task, labels, isLoading }: TaskModalProps) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -107,21 +108,27 @@ const TaskModal = ({ open, onClose, onSubmit, onLabelsChange, onAttachmentsChang
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!name.trim()) { setErrors({ name: 'Task name is required' }); return; }
+    if (name.trim().length > 200) { setErrors({ name: 'Task name must be at most 200 characters' }); return; }
+    const committedSubtasks = commitDraft();
+    const payload: TaskInput = {
+      name: name.trim(), description: description.trim() || null, due_date: dueDate || null, priority,
+      label_ids: labelIds, label_names: stagedLabelNames, subtasks: committedSubtasks,
+    };
     if (persistedTaskId) {
       setErrors({});
+      if (onPersistedTaskUpdate) {
+        const updated = await onPersistedTaskUpdate(persistedTaskId, payload);
+        if (!updated.task) { setErrors({ save: updated.error || 'Task changes could not be saved. Please try again.' }); return; }
+        onLabelsChange?.(updated.task.labels);
+      }
       const allUploaded = await attachmentRef.current?.uploadQueued(persistedTaskId);
       if (allUploaded) onClose();
       else setErrors({ save: 'One or more Attachments still failed. Retry or remove them.' });
       return;
     }
-    if (!name.trim()) { setErrors({ name: 'Task name is required' }); return; }
-    if (name.trim().length > 200) { setErrors({ name: 'Task name must be at most 200 characters' }); return; }
-    const committedSubtasks = commitDraft();
     setErrors({});
-    const result = await onSubmit({
-      name: name.trim(), description: description.trim() || null, due_date: dueDate || null, priority,
-      label_ids: labelIds, label_names: stagedLabelNames, subtasks: committedSubtasks,
-    });
+    const result = await onSubmit(payload);
     if (!result.task) { setErrors((current) => ({ ...current, save: result.error || 'Task could not be saved. Please try again.' })); return; }
     setPersistedTaskId(result.task.task_id);
     onLabelsChange?.(result.task.labels);
