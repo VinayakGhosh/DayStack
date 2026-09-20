@@ -59,4 +59,11 @@ describe('TaskCard', () => {
     expect(screen.getByText(/19 Sep/)).toBeInTheDocument();
     expect(screen.getByRole('checkbox')).toBeChecked();
   });
+
+  it('locks completion while the server mutation is pending', () => {
+    render(<TaskCard task={task} statuses={statuses} onOpen={vi.fn()} onDelete={vi.fn()} onToggleCompletion={vi.fn()} completionPending />);
+
+    expect(screen.getByRole('checkbox', { name: 'Updating completion for Prepare brief' })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('Updating…');
+  });
 });

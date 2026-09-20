@@ -51,4 +51,18 @@ describe('TaskModal', () => {
     expect(await screen.findByText('The service is unavailable.')).toBeInTheDocument();
     expect(name).toHaveValue('Prepare brief');
   });
+
+  it('keeps a staged Label query and shows its save failure inline', async () => {
+    const onSubmit = vi.fn().mockResolvedValue({ error: 'You already have a Label with this name.' });
+    render(<TaskModal open onClose={vi.fn()} onSubmit={onSubmit} labels={[]} />);
+    fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'Prepare brief' } });
+    const query = screen.getByPlaceholderText('Search or create a Label');
+    fireEvent.change(query, { target: { value: 'Client Work' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create “Client Work”' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create Task' }));
+
+    expect(await screen.findByText('You already have a Label with this name.')).toBeInTheDocument();
+    expect(query).toHaveValue('Client Work');
+    expect(screen.getByRole('button', { name: 'Remove Client Work' })).toBeInTheDocument();
+  });
 });

@@ -75,6 +75,7 @@ const SortableTaskCard = ({
   onDelete,
   onToggleCompletion,
   highlighted,
+  completionPending,
 }: {
   task: Task;
   statuses: ProjectStatus[];
@@ -82,6 +83,7 @@ const SortableTaskCard = ({
   onDelete: (t: Task) => void;
   onToggleCompletion: (t: Task, completed: boolean) => void;
   highlighted?: boolean;
+  completionPending?: boolean;
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.task_id,
@@ -104,6 +106,7 @@ const SortableTaskCard = ({
         onToggleCompletion={onToggleCompletion}
         dragHandleProps={{ ...attributes, ...listeners }}
         highlighted={highlighted}
+        completionPending={completionPending}
       />
     </div>
   );
@@ -152,6 +155,7 @@ const ProjectDetailsPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newTaskId, setNewTaskId] = useState<string | null>(null);
   const [completionCandidate, setCompletionCandidate] = useState<ProjectStatus | null>(null);
+  const [pendingCompletionIds, setPendingCompletionIds] = useState<Set<string>>(() => new Set());
   const addTaskButtonRef = useRef<HTMLButtonElement | null>(null);
   const focusReturnRef = useRef<HTMLElement | null>(null);
 
@@ -305,9 +309,15 @@ const ProjectDetailsPage = () => {
   };
 
   const handleToggleCompletion = async (task: Task, completed: boolean) => {
-    const { data, error } = await tasksApi.setCompleted(task.task_id, completed);
-    if (data) setTasks((current) => current.map((item) => item.task_id === task.task_id ? data : item));
-    else toast({ title: 'Failed to update completion', description: error, variant: 'destructive' });
+    if (pendingCompletionIds.has(task.task_id)) return;
+    setPendingCompletionIds((current) => new Set(current).add(task.task_id));
+    try {
+      const { data, error } = await tasksApi.setCompleted(task.task_id, completed);
+      if (data) setTasks((current) => current.map((item) => item.task_id === task.task_id ? data : item));
+      else toast({ title: 'Failed to update completion', description: error, variant: 'destructive' });
+    } finally {
+      setPendingCompletionIds((current) => { const next = new Set(current); next.delete(task.task_id); return next; });
+    }
   };
 
   // ── Drag and Drop ──────────────────────────────────────────────────────────
@@ -642,6 +652,7 @@ const ProjectDetailsPage = () => {
                                 onDelete={(t) => setDeletingTask(t)}
                                 onToggleCompletion={handleToggleCompletion}
                                 highlighted={newTaskId === task.task_id}
+                                completionPending={pendingCompletionIds.has(task.task_id)}
                               />
                             ))
                           )}

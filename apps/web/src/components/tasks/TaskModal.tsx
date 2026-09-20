@@ -119,7 +119,11 @@ const TaskModal = ({ open, onClose, onSubmit, onPersistedTaskUpdate, onLabelsCha
       setErrors({});
       if (onPersistedTaskUpdate) {
         const updated = await onPersistedTaskUpdate(persistedTaskId, payload);
-        if (!updated.task) { setErrors({ save: updated.error || 'Task changes could not be saved. Please try again.' }); return; }
+        if (!updated.task) {
+          const message = updated.error || 'Task changes could not be saved. Please try again.';
+          setErrors(stagedLabelNames.length ? { label: message } : { save: message });
+          return;
+        }
         onLabelsChange?.(updated.task.labels);
       }
       const allUploaded = await attachmentRef.current?.uploadQueued(persistedTaskId);
@@ -129,7 +133,11 @@ const TaskModal = ({ open, onClose, onSubmit, onPersistedTaskUpdate, onLabelsCha
     }
     setErrors({});
     const result = await onSubmit(payload);
-    if (!result.task) { setErrors((current) => ({ ...current, save: result.error || 'Task could not be saved. Please try again.' })); return; }
+    if (!result.task) {
+      const message = result.error || 'Task could not be saved. Please try again.';
+      setErrors((current) => stagedLabelNames.length ? { ...current, label: message } : { ...current, save: message });
+      return;
+    }
     setPersistedTaskId(result.task.task_id);
     onLabelsChange?.(result.task.labels);
     if (attachmentRef.current?.hasQueuedFiles()) {
@@ -147,7 +155,7 @@ const TaskModal = ({ open, onClose, onSubmit, onPersistedTaskUpdate, onLabelsCha
     const value = ' '.concat(labelQuery).trim().replace(/\s+/g, ' ');
     if (!value) return;
     if (value.length > 64) { setErrors((current) => ({ ...current, label: 'Label names can be at most 64 characters.' })); return; }
-    setStagedLabelNames((current) => [...current, value]); setLabelQuery(''); setErrors((current) => ({ ...current, label: undefined }));
+    setStagedLabelNames((current) => [...current, value]); setErrors((current) => ({ ...current, label: undefined }));
   };
 
   return (

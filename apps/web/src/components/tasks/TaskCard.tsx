@@ -18,6 +18,7 @@ interface TaskCardProps {
   onToggleCompletion: (task: Task, completed: boolean) => void;
   dragHandleProps?: HTMLAttributes<HTMLButtonElement>;
   highlighted?: boolean;
+  completionPending?: boolean;
   now?: Date;
 }
 
@@ -27,7 +28,7 @@ const priorityClasses = {
   high: 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
 };
 
-const TaskCard = ({ task, statuses, onOpen, onDelete, onToggleCompletion, dragHandleProps, highlighted, now }: TaskCardProps) => {
+const TaskCard = ({ task, statuses, onOpen, onDelete, onToggleCompletion, dragHandleProps, highlighted, completionPending = false, now }: TaskCardProps) => {
   const completed = statuses.some((status) => status.status_id === task.status_id && status.is_completion);
   const due = task.due_date ? formatTaskDueDate(task.due_date, completed, now) : null;
   const completeSubtasks = task.subtasks.filter((subtask) => subtask.is_completed).length;
@@ -37,7 +38,7 @@ const TaskCard = ({ task, statuses, onOpen, onDelete, onToggleCompletion, dragHa
     <Card className={cn('group relative transition-all hover:shadow-md', completed && 'opacity-70', highlighted && 'ring-2 ring-primary animate-pulse')} data-task-id={task.task_id}>
       <CardContent className="p-3">
         <div className="flex items-start gap-2">
-          <Checkbox aria-label={completed ? `Reopen ${task.name}` : `Complete ${task.name}`} checked={completed} onClick={stop} onCheckedChange={() => onToggleCompletion(task, !completed)} className="mt-1 shrink-0" />
+          <Checkbox aria-label={completionPending ? `Updating completion for ${task.name}` : completed ? `Reopen ${task.name}` : `Complete ${task.name}`} checked={completed} disabled={completionPending} onClick={stop} onCheckedChange={() => onToggleCompletion(task, !completed)} className="mt-1 shrink-0" />
           <div role="button" tabIndex={0} data-task-open-id={task.task_id} aria-label={`Open details for ${task.name}`} className="min-w-0 flex-1 cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onOpen(task)} onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault();
@@ -53,6 +54,7 @@ const TaskCard = ({ task, statuses, onOpen, onDelete, onToggleCompletion, dragHa
               {task.labels.length > 2 && <span>+{task.labels.length - 2}</span>}
               {task.subtasks.length > 0 && <span>{completeSubtasks}/{task.subtasks.length}</span>}
               {task.attachment_count > 0 && <span className="inline-flex items-center gap-1"><Paperclip className="h-3 w-3" />{task.attachment_count}</span>}
+              {completionPending && <span role="status">Updating…</span>}
             </div>
           </div>
           <div className="flex shrink-0 items-center" onClick={stop} onKeyDown={stop}>
