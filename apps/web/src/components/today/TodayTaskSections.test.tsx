@@ -12,6 +12,7 @@ const task = (id: string, name: string) => ({
   priority: 'none' as const,
   labels: [],
   subtasks: [],
+  attachment_count: 0,
   status_id: 'status-1',
   status_name: 'To Do',
   created_by: 'member-1',

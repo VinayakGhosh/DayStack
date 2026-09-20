@@ -22,6 +22,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { labelsApi, projectsApi, projectStatusApi, tasksApi, Project, Task, ProjectStatus, TaskInput, Label as TaskLabel } from '@/lib/api';
