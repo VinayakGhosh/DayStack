@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { authApi, Member } from '@/lib/api';
+import { authApi, Member, SESSION_EXPIRED_EVENT } from '@/lib/api';
 
 interface AuthContextType {
   user: Member | null;
@@ -18,22 +18,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshUser = async () => {
-    const { data, error } = await authApi.getProfile();
+    const { data } = await authApi.getProfile();
     if (data) {
       setUser(data);
-    } else if (error) {
-      const refreshed = await authApi.refresh();
-      if (refreshed.data) {
-        setUser(refreshed.data);
-      } else {
-        setUser(null);
-      }
+    } else {
+      setUser(null);
     }
     setIsLoading(false);
   };
 
   useEffect(() => {
+    const handleSessionExpired = () => {
+      setUser(null);
+      setIsLoading(false);
+    };
+
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
     refreshUser();
+
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
   }, []);
 
   const login = async (email: string, password: string) => {

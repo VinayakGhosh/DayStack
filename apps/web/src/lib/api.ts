@@ -10,8 +10,53 @@ interface ApiResponse<T> {
   errorCode?: string;
 }
 
+export const SESSION_EXPIRED_EVENT = 'daystack:session-expired';
+
+type RefreshResult = 'refreshed' | 'expired' | 'failed';
+
+let refreshPromise: Promise<RefreshResult> | null = null;
+
 const csrfToken = (): string | undefined =>
   document.cookie.split('; ').find((entry) => entry.startsWith('daystack_csrf='))?.split('=')[1];
+
+const fetchApi = (endpoint: string, options: RequestInit = {}) => {
+  const token = csrfToken();
+  const headers = new Headers(options.headers);
+
+  if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  if (token) {
+    headers.set('X-CSRF-Token', token);
+  }
+
+  return fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+    credentials: 'include',
+  });
+};
+
+const refreshSession = (): Promise<RefreshResult> => {
+  if (!refreshPromise) {
+    refreshPromise = fetchApi('/v1/sessions/refresh', { method: 'POST' })
+      .then((response): RefreshResult => {
+        if (response.ok) return 'refreshed';
+        if (response.status === 401 || response.status === 403) {
+          window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+          return 'expired';
+        }
+        return 'failed';
+      })
+      .catch((): RefreshResult => 'failed')
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+
+  return refreshPromise;
+};
+
 const handleResponse = async <T>(response: Response): Promise<ApiResponse<T>> => {
   if (response.status === 204) {
     return { data: undefined as T };
@@ -34,19 +79,19 @@ const apiRequest = async <T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> => {
-  const token = csrfToken();
-  const headers: HeadersInit = {
-    ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-    ...(token && { 'X-CSRF-Token': token }),
-    ...options.headers,
-  };
-
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers,
-      credentials: 'include',
-    });
+    let response = await fetchApi(endpoint, options);
+
+    if (response.status === 401 && endpoint !== '/v1/sessions/refresh') {
+      const errorData = await response.clone().json().catch(() => ({}));
+      if (errorData.detail?.code === 'invalid_session') {
+        const refreshResult = await refreshSession();
+        if (refreshResult === 'refreshed') {
+          response = await fetchApi(endpoint, options);
+        }
+      }
+    }
+
     return handleResponse<T>(response);
   } catch (error) {
     return { error: 'Network error. Please check your connection.' };
