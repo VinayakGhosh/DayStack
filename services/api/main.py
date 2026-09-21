@@ -24,7 +24,7 @@ logging.basicConfig(
 app = FastAPI(
     title="DayStack API",
     description="API for the DayStack MVP",
-    version="1.0.0",
+    version="1.0.1",
 )
 
 app.add_middleware(
