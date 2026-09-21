@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
+import { APP_VERSION } from '@/lib/version';
 import DashboardLayout from './DashboardLayout';
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -26,5 +27,6 @@ describe('DashboardLayout', () => {
     expect(screen.getAllByRole('link', { name: 'Settings' }).length).toBeGreaterThan(0);
     expect(screen.queryByRole('link', { name: 'Subscription' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument();
+    expect(screen.getByText(`DayStack v${APP_VERSION}`)).toBeInTheDocument();
   });
 });

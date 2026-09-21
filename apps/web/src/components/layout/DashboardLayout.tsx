@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { APP_VERSION } from '@/lib/version';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useState } from 'react';
 
@@ -91,6 +92,9 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
           <LogOut className="h-5 w-5" />
           Log out
         </Button>
+        <p className="mt-3 px-4 text-xs text-muted-foreground/70">
+          DayStack v{APP_VERSION}
+        </p>
       </div>
     </div>
   );
