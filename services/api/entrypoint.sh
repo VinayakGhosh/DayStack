@@ -4,14 +4,14 @@ set -e
 echo "⏳ Waiting for database to be ready..."
 
 until python -c "
-import psycopg2, os
-psycopg2.connect(
-    host=os.environ['DATABASE_HOST'],
-    port=os.environ.get('DATABASE_PORT', '5432'),
-    user=os.environ['DATABASE_USER'],
-    password=os.environ['DATABASE_PASSWORD'],
-    dbname=os.environ['DATABASE_NAME']
-)
+import os
+from sqlalchemy import create_engine
+from db.config import resolve_database_url
+
+engine = create_engine(resolve_database_url(os.environ))
+with engine.connect():
+    pass
+engine.dispose()
 " 2>/dev/null; do
   echo "⏳ Database not ready, retrying in 2s..."
   sleep 2

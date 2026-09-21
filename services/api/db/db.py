@@ -5,14 +5,10 @@ from dotenv import load_dotenv
 import os
 import logging
 
-load_dotenv()
-DATABASE_USER = os.getenv('DATABASE_USER')
-DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD')
-DATABASE_HOST = os.getenv('DATABASE_HOST')
-DATABASE_PORT = os.getenv('DATABASE_PORT')
-DATABASE_NAME = os.getenv('DATABASE_NAME')
+from db.config import resolve_database_url
 
-SQLALCHEMY_DATABASE_URL = f'postgresql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}'
+load_dotenv()
+SQLALCHEMY_DATABASE_URL = resolve_database_url(os.environ)
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     pool_size=30,  # Number of connections in the pool

@@ -12,6 +12,7 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+from db.config import resolve_database_url
 from db.db import Base
 # IMPORTANT: import all models so Base.metadata is populated
 from models.user import Users, Subscriptions, Usage
@@ -25,16 +26,9 @@ from models.organization import Organization, OrganizationMember, OrganizationIn
 # access to the values within the .ini file in use.
 config = context.config
 
-# Set the database URL from environment variables
-DATABASE_USER = os.getenv('DATABASE_USER')
-DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD')
-DATABASE_HOST = os.getenv('DATABASE_HOST')
-DATABASE_PORT = os.getenv('DATABASE_PORT')
-DATABASE_NAME = os.getenv('DATABASE_NAME')
-SQLALCHEMY_DATABASE_URL = f"postgresql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}"
-
-if SQLALCHEMY_DATABASE_URL:
-    config.set_main_option("sqlalchemy.url", SQLALCHEMY_DATABASE_URL)
+# ConfigParser treats percent signs in encoded URLs as interpolation markers.
+database_url = resolve_database_url(os.environ).replace("%", "%%")
+config.set_main_option("sqlalchemy.url", database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

@@ -1,18 +1,32 @@
 services:
+  backend:
+    build:
+      context: .
+    container_name: daystack-api
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres:
     image: postgres:17
     container_name: daystack-db
     environment:
-      - POSTGRES_USER=${DATABASE_USER}
-      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
-      - POSTGRES_DB=${DATABASE_NAME}
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
     ports:
-      - "5432:5432"
+      - "${DATABASE_PORT:-5432}:5432"
     volumes:
       - daystack-data:/var/lib/postgresql/data
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
