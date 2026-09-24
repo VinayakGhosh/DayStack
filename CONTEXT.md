@@ -17,8 +17,16 @@ The owner of Projects. Every Project belongs to exactly one Team, whether that T
 _Avoid_: Organization, workspace, company
 
 **Personal Team**:
-The Team of one that every Member receives automatically; it is how an individual uses DayStack without creating or joining a Team.
+The Team of one that every Member receives automatically; it is how an individual uses DayStack without creating or joining a Team. A Personal Team never gains other Members; collaborating means using a separate Team.
 _Avoid_: Personal workspace, solo account
+
+**Owner**:
+The single Member accountable for a Team. Ownership can be transferred to another Member of the Team. Every other person in the Team simply holds the Member role.
+_Avoid_: Admin, manager
+
+**Invitation**:
+An Owner's email-addressed offer for someone to join a Team. It is accepted by a Member signed in with that email, and it expires or can be revoked.
+_Avoid_: Invite link, join request
 
 **Project**:
 A Team-owned container for related work, its task board, and its project-scoped workflow statuses.
@@ -37,7 +45,7 @@ A project-scoped, member-defined column in a task board that represents the curr
 _Avoid_: Category, tag, label
 
 **Today**:
-The member's explicit, ordered shortlist of up to three active tasks for one member-local calendar day. A new day begins with an empty shortlist.
+The member's explicit, ordered shortlist of up to three active tasks for one member-local calendar day, drawn from any Team the member belongs to. Today belongs to the Member, never to a Team. A new day begins with an empty shortlist.
 _Avoid_: Daily plan, agenda
 
 **Due date**:
@@ -49,7 +57,7 @@ The member's chosen importance level for a task: None, Low, Medium, or High.
 _Avoid_: Urgency, severity
 
 **Label**:
-A reusable, member-defined classification applied to tasks across that member's projects.
+A reusable, Team-owned classification applied to tasks across that Team's projects, shared by everyone in the Team.
 _Avoid_: Tag, category
 
 **Attachment**:
