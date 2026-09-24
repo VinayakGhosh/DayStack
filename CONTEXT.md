@@ -37,7 +37,7 @@ A Team-owned container for related work, its task board, and its project-scoped 
 _Avoid_: Workspace, list, board
 
 **Plan**:
-The named package a Team is on, such as Free or Pro, which sets its Quotas, its features, and its price.
+The named package a Team is on, which sets its Quotas, its features, and its price. A Personal Team is on Personal Free or Personal Pro; every other Team is on Team Free or Team Pro. "Free" or "Pro" alone is acceptable where the kind of Team is obvious.
 _Avoid_: Tier, subscription, package
 
 **Quota**:
