@@ -9,15 +9,23 @@ The canonical product name for this application.
 _Avoid_: Task Factory
 
 **Member**:
-The authenticated individual who owns and uses a personal DayStack workspace in the MVP.
-_Avoid_: Customer, account, team member
+An authenticated person using DayStack. A Member belongs to one or more Teams, always including their own Personal Team.
+_Avoid_: Customer, account, user
+
+**Team**:
+The owner of Projects. Every Project belongs to exactly one Team, whether that Team is one person or several.
+_Avoid_: Organization, workspace, company
+
+**Personal Team**:
+The Team of one that every Member receives automatically; it is how an individual uses DayStack without creating or joining a Team.
+_Avoid_: Personal workspace, solo account
 
 **Project**:
-A member-owned container for related work, its task board, and its project-scoped workflow statuses.
+A Team-owned container for related work, its task board, and its project-scoped workflow statuses.
 _Avoid_: Workspace, list, board
 
 **Quota**:
-An MVP guardrail that limits a Member to five non-deleted Projects and a Project to thirty non-completed Tasks. It has no pricing or upgrade implication.
+A limit on how much a Team may hold, such as five non-deleted Projects or thirty non-completed Tasks in a Project. The current values are the Free tier's limits.
 _Avoid_: Plan limit, subscription limit
 
 **Task**:
