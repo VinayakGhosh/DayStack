@@ -28,6 +28,10 @@ _Avoid_: Admin, manager
 An Owner's email-addressed offer for someone to join a Team. It is accepted by a Member signed in with that email, and it expires or can be revoked.
 _Avoid_: Invite link, join request
 
+**Over-limit Team**:
+A Team holding more Members or Projects than its Plan's Quotas allow. It is read-only, apart from actions that bring it back within its Quotas.
+_Avoid_: Locked, frozen, suspended
+
 **Project**:
 A Team-owned container for related work, its task board, and its project-scoped workflow statuses.
 _Avoid_: Workspace, list, board
