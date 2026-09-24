@@ -32,8 +32,12 @@ _Avoid_: Invite link, join request
 A Team-owned container for related work, its task board, and its project-scoped workflow statuses.
 _Avoid_: Workspace, list, board
 
+**Plan**:
+The named package a Team is on, such as Free or Pro, which sets its Quotas, its features, and its price.
+_Avoid_: Tier, subscription, package
+
 **Quota**:
-A limit on how much a Team may hold, such as five non-deleted Projects or thirty non-completed Tasks in a Project. The current values are the Free tier's limits.
+A limit on how much a Team may hold, set by the Team's Plan, such as five non-deleted Projects or thirty non-completed Tasks in a Project. The current values are the Free Plan's limits.
 _Avoid_: Plan limit, subscription limit
 
 **Task**:
