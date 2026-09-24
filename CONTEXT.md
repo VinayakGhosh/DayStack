@@ -40,12 +40,24 @@ _Avoid_: Plan limit, subscription limit
 A discrete unit of work within one project that can be placed in a workflow status.
 _Avoid_: To-do, ticket, item
 
+**Assignee**:
+The one Member of a Task's Team who is responsible for completing it. A Task has at most one Assignee.
+_Avoid_: Owner, responsible, assigned user
+
+**Comment**:
+A plain-text message a Team's Member leaves on one of that Team's Tasks.
+_Avoid_: Note, reply, message
+
+**Task history**:
+The record of what has happened to one Task: its creation, Workflow status changes, and Assignee changes.
+_Avoid_: Activity feed, audit log, timeline
+
 **Workflow status**:
 A project-scoped, member-defined column in a task board that represents the current stage of a task. Every project has exactly one completion status.
 _Avoid_: Category, tag, label
 
 **Today**:
-The member's explicit, ordered shortlist of up to three active tasks for one member-local calendar day, drawn from any Team the member belongs to. Today belongs to the Member, never to a Team. A new day begins with an empty shortlist.
+The member's explicit, ordered shortlist of up to three active tasks for one member-local calendar day, drawn from any Team the member belongs to. Today belongs to the Member, never to a Team. Teammates can see which of their own Team's Tasks are in a Member's Today, never Tasks from other Teams. A new day begins with an empty shortlist.
 _Avoid_: Daily plan, agenda
 
 **Due date**:
